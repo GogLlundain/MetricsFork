@@ -6,7 +6,7 @@ using System.Configuration;
 
 namespace Metrics.Parsers.WebPagetest
 {
-    public class SiteElement : ConfigurationElement
+    public class SiteConfigurationElement : ConfigurationElement
     {
         [ConfigurationProperty("enabled", DefaultValue = true, IsRequired = false)]
         public bool Enabled
@@ -35,7 +35,7 @@ namespace Metrics.Parsers.WebPagetest
         }
 
         [ConfigurationProperty("graphiteKey", IsRequired = true, IsKey = true, DefaultValue = "site")]
-        [StringValidator(InvalidCharacters = "~!@#$%^&*()[]{}/;'\"|\\ ", MinLength = 3, MaxLength = 10)]
+        [StringValidator(InvalidCharacters = "~!@#$%^&*()[]{}/;'\"|\\ ", MinLength = 3, MaxLength = 50)]
         public string GraphiteKey
         {
             get

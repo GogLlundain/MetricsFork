@@ -1,11 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Xml.XPath;
 using System.Configuration;
 
-namespace Metrics.Parsers.WebPagetest
+namespace Metrics.Parsers
 {
     public class WebPagetestXmlParser
     {
@@ -52,14 +49,19 @@ namespace Metrics.Parsers.WebPagetest
 
         private static DateTime EpochToDateTime(string epoch)
         {
-            long seconds = Int64.Parse(epoch);
-            DateTime dt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
-            dt.AddSeconds(seconds);
+            var seconds = Int64.Parse(epoch);
+            var dt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+            dt = dt.AddSeconds(seconds);
             return dt;
         }
 
         private void SendStat(string key, DateTime time, int value)
         {
+            /*using (var client = new GraphiteTcpClient("ec2-176-34-164-231.eu-west-1.compute.amazonaws.com", 8080))
+            {
+                client.Send(key, value, time);
+            }*/
+
             Console.WriteLine("{0} - {1}", key, value);
         }
     }

@@ -6,24 +6,24 @@ using System.Configuration;
 
 namespace Metrics.Parsers.WebPagetest
 {
-    [ConfigurationCollection(typeof(SiteElement), AddItemName = "Site",
+    [ConfigurationCollection(typeof(SiteConfigurationElement), AddItemName = "Site",
         CollectionType = ConfigurationElementCollectionType.BasicMap)]
-    public class SiteCollection : ConfigurationElementCollection
+    public class SiteConfigurationCollection : ConfigurationElementCollection
     {
 
         protected override ConfigurationElement CreateNewElement()
         {
-            return new SiteElement();
+            return new SiteConfigurationElement();
         }
 
         protected override object GetElementKey(ConfigurationElement element)
         {
-            return ((SiteElement)element).GraphiteKey;
+            return ((SiteConfigurationElement)element).GraphiteKey;
         }
 
-        new public SiteElement this[string name]
+        new public SiteConfigurationElement this[string name]
         {
-            get { return (SiteElement)BaseGet(name); }
+            get { return (SiteConfigurationElement)BaseGet(name); }
         }
     }
 }

@@ -6,12 +6,12 @@ using System.Configuration;
 
 namespace Metrics.Parsers.WebPagetest
 {
-    public class SiteSection : ConfigurationSection
+    public class SiteConfigurationSection : ConfigurationSection
     {
         [ConfigurationProperty("Sites", IsRequired = true)]
-        public SiteCollection Sites
+        public SiteConfigurationCollection Sites
         {
-            get { return (SiteCollection)this["Sites"]; }
+            get { return (SiteConfigurationCollection)this["Sites"]; }
         }
 
     }

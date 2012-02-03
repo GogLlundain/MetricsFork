@@ -41,11 +41,17 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="LogTail\LogConfigurationCollection.cs" />
+    <Compile Include="LogTail\LogConfigurationElement.cs" />
+    <Compile Include="LogTail\LogConfigurationSection.cs" />
+    <Compile Include="IMetricParser.cs" />
+    <Compile Include="LogTailParser.cs" />
+    <Compile Include="Metric.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="WebPagetest\SiteElement.cs" />
-    <Compile Include="WebPagetest\SiteCollection.cs" />
-    <Compile Include="WebPagetest\SiteSection.cs" />
-    <Compile Include="WebPagetest\WebPagetestXmlParser.cs" />
+    <Compile Include="WebPagetest\SiteConfigurationElement.cs" />
+    <Compile Include="WebPagetest\SiteConfigurationCollection.cs" />
+    <Compile Include="WebPagetest\SiteConfigurationSection.cs" />
+    <Compile Include="WebPagetestXmlParser.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
