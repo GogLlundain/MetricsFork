@@ -30,7 +30,7 @@ namespace Metrics
             {
                 foreach (var metric in metrics)
                 {
-                    //graphiteClient.Send(metric.Key, metric.Value, metric.Timestamp);
+                    graphiteClient.Send(metric.Key, metric.Value, metric.Timestamp);
                 }
             }
         }
