@@ -4,6 +4,6 @@ namespace Metrics.Parsers
 {
     public interface IMetricParser
     {
-        IDictionary<string, Metric> GetMetrics();
+        IEnumerable<Metric> GetMetrics();
     }
 }

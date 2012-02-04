@@ -57,11 +57,6 @@ namespace Metrics.Parsers
 
         private void SendStat(string key, DateTime time, int value)
         {
-            /*using (var client = new GraphiteTcpClient("ec2-176-34-164-231.eu-west-1.compute.amazonaws.com", 8080))
-            {
-                client.Send(key, value, time);
-            }*/
-
             Console.WriteLine("{0} - {1}", key, value);
         }
     }

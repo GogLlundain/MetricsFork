@@ -75,7 +75,7 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
-        [ConfigurationProperty("value", IsRequired = true)]
+        [ConfigurationProperty("value", IsRequired = false, DefaultValue = null)]
         public string Value
         {
             get
@@ -87,6 +87,20 @@ namespace Metrics.Parsers.LogTail
                 this["value"] = value;
             }
         }
+
+        [ConfigurationProperty("maxTailMB", IsRequired = false, DefaultValue = 0)]
+        public int MaxTailMB
+        {
+            get
+            {
+                return (int)this["maxTailMB"];
+            }
+            set
+            {
+                this["maxTailMB"] = value;
+            }
+        }
+
 
         [ConfigurationProperty("interval", IsRequired = false)]
         public string Interval
