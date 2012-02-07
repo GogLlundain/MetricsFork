@@ -45,6 +45,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="LogTail\LogStatConfigurationCollection.cs" />
+    <Compile Include="LogTail\LogStatConfigurationElement.cs" />
     <Compile Include="LogTail\LogConfigurationCollection.cs" />
     <Compile Include="LogTail\LogConfigurationElement.cs" />
     <Compile Include="LogTail\LogConfigurationSection.cs" />

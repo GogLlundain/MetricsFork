@@ -14,7 +14,7 @@ namespace Metrics.Parsers.LogTail
 
         protected override object GetElementKey(ConfigurationElement element)
         {
-            return ((LogConfigurationElement)element).GraphiteKey;
+            return ((LogConfigurationElement)element).Location + ((LogConfigurationElement)element).Pattern;
         }
 
         new public LogConfigurationElement this[string name]

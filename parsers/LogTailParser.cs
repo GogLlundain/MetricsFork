@@ -81,7 +81,7 @@ namespace Metrics.Parsers
         {
             var metrics = new ConcurrentBag<Metric>();
 
-            //Get list of log files
+            //Get list of log files to de-dupe in case of multiple types of parsing
             var logsByFile = new Dictionary<string, List<LogConfigurationElement>>();
             foreach (LogConfigurationElement log in logs)
             {
@@ -109,7 +109,12 @@ namespace Metrics.Parsers
 
         private IEnumerable<Metric> ReadTail(string file, IEnumerable<LogConfigurationElement> logsForFile)
         {
-            var rawValues = new Dictionary<LogConfigurationElement, List<Metric>>();
+            var sw = new Stopwatch();
+            sw.Start();
+            long lines = 0;
+
+
+            var rawValues = new ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>>();
             var metrics = new List<Metric>();
 
             if ((logsForFile == null) || (!logsForFile.Any()))
@@ -152,25 +157,13 @@ namespace Metrics.Parsers
                         while (reader.Peek() != -1)
                         {
                             var line = reader.ReadLine();
+                            lines++;
 
                             //Update the lastPosition counter before we try parse so any failures do not repeat the same line
                             lastPosition = reader.BaseStream.Position;
                             Parallel.ForEach(logsForFile, log =>
                                                        {
-                                                           var metric = ParseLine(log, line);
-
-                                                           //Null metric means the line did not match the regex
-                                                           if (metric != null)
-                                                           {
-                                                               if (log.IncludeZeros || (!log.IncludeZeros && metric.Value > 0))
-                                                               {
-                                                                   if (!rawValues.ContainsKey(log))
-                                                                   {
-                                                                       rawValues.Add(log, new List<Metric>());
-                                                                   }
-                                                                   rawValues[log].Add(metric);
-                                                               }
-                                                           }
+                                                           ParseLine(log, line, rawValues);
                                                        });
 
                         }
@@ -186,78 +179,97 @@ namespace Metrics.Parsers
             //Aggregate the metrics by their log aggregation method
             foreach (var log in logsForFile)
             {
-                if (rawValues.ContainsKey(log))
+                foreach (LogStatConfigurationElement stat in log.Stats)
                 {
-                    switch (log.AggregateType)
+                    if (rawValues.ContainsKey(stat))
                     {
-                        case "count":
-                            metrics.AddRange(from value in rawValues[log]
-                                             group value by new { value.Timestamp, value.Key }
-                                                 into metricGroup
-                                                 select
-                                                     new Metric
-                                                         {
-                                                             Key = metricGroup.Key.Key,
-                                                             Timestamp = metricGroup.Key.Timestamp,
-                                                             Value = metricGroup.Count()
-                                                         });
-                            break;
-                        case "avg":
-                        default:
-                            metrics.AddRange(from value in rawValues[log]
-                                             group value by new { value.Timestamp, value.Key }
-                                                 into metricGroup
-                                                 select
-                                                     new Metric
-                                                         {
-                                                             Key = metricGroup.Key.Key,
-                                                             Timestamp = metricGroup.Key.Timestamp,
-                                                             Value =
-                                                                 metricGroup.Sum(metric => metric.Value) / metricGroup.Count()
-                                                         });
-                            break;
+                        switch (stat.AggregateType)
+                        {
+                            case "count":
+                                metrics.AddRange(from value in rawValues[stat]
+                                                 group value by new { value.Timestamp, value.Key }
+                                                     into metricGroup
+                                                     select
+                                                         new Metric
+                                                             {
+                                                                 Key = metricGroup.Key.Key,
+                                                                 Timestamp = metricGroup.Key.Timestamp,
+                                                                 Value = metricGroup.Count()
+                                                             });
+                                break;
+                            case "avg":
+                            default:
+                                metrics.AddRange(from value in rawValues[stat]
+                                                 group value by new { value.Timestamp, value.Key }
+                                                     into metricGroup
+                                                     select
+                                                         new Metric
+                                                             {
+                                                                 Key = metricGroup.Key.Key,
+                                                                 Timestamp = metricGroup.Key.Timestamp,
+                                                                 Value =
+                                                                     metricGroup.Sum(metric => metric.Value) /
+                                                                     metricGroup.Count()
+                                                             });
+                                break;
+                        }
                     }
                 }
             }
 
+
+            sw.Stop();
+            Console.WriteLine("Finished {0}", file);
+            Console.WriteLine("New metrics added:  {0}", metrics.Count);
+            Console.WriteLine("{0} lines read in {1}ms, {2:F2}ms/line", lines, sw.ElapsedMilliseconds,
+                              (float)sw.ElapsedMilliseconds / (float)lines);
             return metrics;
         }
 
-        private static Metric ParseLine(LogConfigurationElement log, string line)
+        private static void ParseLine(LogConfigurationElement log, string line, 
+            ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues)
         {
             var matches = log.CompiledRegex.Matches(line);
-            if (matches.Count > 0)
+
+            //Loop through all the various stats
+            foreach (LogStatConfigurationElement stat in log.Stats)
             {
-                var key = log.GraphiteKey;
-
-                //do key replacements
-                foreach (var map in log.Mapping.AllKeys)
+                if (matches.Count > 0)
                 {
-                    if (log.Mapping[map].Value.StartsWith("?"))
+                    var key = stat.GraphiteKey;
+
+                    //do key replacements
+                    foreach (var map in log.Mapping.AllKeys)
                     {
-                        key = key.Replace("{" + map + "}", matches[0].Groups[log.Mapping[map].Value.TrimStart('?')].Value);
+                        if (log.Mapping[map].Value.StartsWith("?"))
+                        {
+                            key = key.Replace("{" + map + "}",
+                                              matches[0].Groups[log.Mapping[map].Value.TrimStart('?')].Value);
+                        }
+                        else
+                        {
+                            key = key.Replace("{" + map + "}", log.Mapping[map].Value);
+                        }
                     }
-                    else
+
+                    var metric = new Metric
+                                     {
+                                         Key = key,
+                                         Timestamp = DateTime.ParseExact(matches[0].Groups[stat.Interval].Value, stat.DateFormat, CultureInfo.InvariantCulture)
+                                     };
+                    if (!String.IsNullOrEmpty(stat.Value))
                     {
-                        key = key.Replace("{" + map + "}", log.Mapping[map].Value);
+                        metric.Value = Int32.Parse(matches[0].Groups[stat.Value].Value);
+                    }
+
+
+                    if (stat.IncludeZeros || (!stat.IncludeZeros && metric.Value > 0))
+                    {
+                        rawValues.TryAdd(stat, new ConcurrentBag<Metric>());
+                        rawValues[stat].Add(metric);
                     }
                 }
-
-                var metric = new Metric
-                                 {
-                                     Key = key,
-                                     Timestamp =
-                                         DateTime.ParseExact(matches[0].Groups[log.Interval].Value, log.DateFormat,
-                                                             CultureInfo.InvariantCulture)
-                                 };
-                if (!String.IsNullOrEmpty(log.Value))
-                {
-                    metric.Value = Int32.Parse(matches[0].Groups[log.Value].Value);
-                }
-                return metric;
             }
-
-            return null;
         }
     }
 }
