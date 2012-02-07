@@ -36,6 +36,19 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
+        [ConfigurationProperty("includeZeros", DefaultValue = true, IsRequired = false)]
+        public bool IncludeZeros
+        {
+            get
+            {
+                return (Boolean)this["includeZeros"];
+            }
+            set
+            {
+                this["includeZeros"] = value;
+            }
+        }
+
         [ConfigurationProperty("location", IsRequired = false)]
         public string Location
         {

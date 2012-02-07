@@ -1,10 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using Metrics.Parsers.WebPagetest;
 using System.Configuration;
-using System.Xml.XPath;
 using Metrics.Parsers;
 using Graphite;
 
@@ -12,11 +8,15 @@ namespace Metrics
 {
     class Program
     {
-        static void Main(string[] args)
+        static void Main()
         {
             //Configuration based.  Config file lists logs, sizes, regex, etc
-            LogTailParser parser = new LogTailParser();
-            SendMetricsToGraphite(parser.GetMetrics());
+            var logParser = new LogTailParser();
+            SendMetricsToGraphite(logParser.GetMetrics());
+
+            //WPT parsers
+            var wptParser = new WebPagetestParser();
+            SendMetricsToGraphite(wptParser.GetMetrics());
         }
 
         /// <summary>

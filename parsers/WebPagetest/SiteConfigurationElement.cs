@@ -35,7 +35,7 @@ namespace Metrics.Parsers.WebPagetest
         }
 
         [ConfigurationProperty("graphiteKey", IsRequired = true, IsKey = true, DefaultValue = "site")]
-        [StringValidator(InvalidCharacters = "~!@#$%^&*()[]{}/;'\"|\\ ", MinLength = 3, MaxLength = 50)]
+        [StringValidator(InvalidCharacters = "~!@#$%^&*()[]/;'\"|\\ ", MinLength = 3, MaxLength = 50)]
         public string GraphiteKey
         {
             get
@@ -48,16 +48,16 @@ namespace Metrics.Parsers.WebPagetest
             }
         }
 
-        [ConfigurationProperty("urlPrefix", IsRequired = true)]
-        public string UrlPrefix
+        [ConfigurationProperty("url", IsRequired = true)]
+        public string Url
         {
             get
             {
-                return (String)this["urlPrefix"];
+                return (String)this["url"];
             }
             set
             {
-                this["urlPrefix"] = value;
+                this["url"] = value;
             }
         }
 

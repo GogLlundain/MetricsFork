@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Configuration;
 
 namespace Metrics.Parsers.WebPagetest
@@ -14,5 +11,17 @@ namespace Metrics.Parsers.WebPagetest
             get { return (SiteConfigurationCollection)this["Sites"]; }
         }
 
+        [ConfigurationProperty("wptHost", IsRequired = true)]
+        public string WebPagetestHost
+        {
+            get
+            {
+                return (String)this["wptHost"];
+            }
+            set
+            {
+                this["wptHost"] = value;
+            }
+        }
     }
 }
