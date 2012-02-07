@@ -109,11 +109,6 @@ namespace Metrics.Parsers
 
         private IEnumerable<Metric> ReadTail(string file, IEnumerable<LogConfigurationElement> logsForFile)
         {
-            var sw = new Stopwatch();
-            sw.Start();
-            long lines = 0;
-
-
             var rawValues = new ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>>();
             var metrics = new List<Metric>();
 
@@ -157,7 +152,6 @@ namespace Metrics.Parsers
                         while (reader.Peek() != -1)
                         {
                             var line = reader.ReadLine();
-                            lines++;
 
                             //Update the lastPosition counter before we try parse so any failures do not repeat the same line
                             lastPosition = reader.BaseStream.Position;
@@ -217,12 +211,6 @@ namespace Metrics.Parsers
                 }
             }
 
-
-            sw.Stop();
-            Console.WriteLine("Finished {0}", file);
-            Console.WriteLine("New metrics added:  {0}", metrics.Count);
-            Console.WriteLine("{0} lines read in {1}ms, {2:F2}ms/line", lines, sw.ElapsedMilliseconds,
-                              (float)sw.ElapsedMilliseconds / (float)lines);
             return metrics;
         }
 
