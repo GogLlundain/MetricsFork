@@ -88,14 +88,14 @@ namespace Metrics.Parsers
         {
             using (var md5 = MD5.Create())
             {
-                var tempName = LogTailParser.GetMd5HashFileName(md5, graphiteKey);
+                var tempName = "wpt_" + LogTailParser.GetMd5HashFileName(md5, graphiteKey);
                 if (!File.Exists(tempName))
                 {
                     return DateTime.MinValue;
                 }
 
                 DateTime lastRead;
-                DateTime.TryParse(File.ReadAllText(tempName), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal,  out lastRead);
+                DateTime.TryParse(File.ReadAllText(tempName), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out lastRead);
                 return lastRead;
             }
         }
@@ -104,7 +104,7 @@ namespace Metrics.Parsers
         {
             using (var md5 = MD5.Create())
             {
-                var tempName = LogTailParser.GetMd5HashFileName(md5, graphiteKey);
+                var tempName = "wpt_" + LogTailParser.GetMd5HashFileName(md5, graphiteKey);
                 File.WriteAllText(tempName, lastRead.ToString(CultureInfo.InvariantCulture));
             }
         }
@@ -139,7 +139,7 @@ namespace Metrics.Parsers
             if (difference > 365)
                 difference = 365;
 
-            var request = WebRequest.Create(String.Format(siteSection.WebPagetestHost + "/testlog.php?days={0:F0}&private=1&filter={1}&f=csv", (int)difference, url));
+            var request = WebRequest.Create(String.Format("{0}/testlog.php?days={1:F0}&private=1&filter={2}&f=csv", siteSection.WebPagetestHost, (int)difference, url));
 
             var response = (HttpWebResponse)request.GetResponse();
             using (var stream = response.GetResponseStream())
@@ -153,7 +153,7 @@ namespace Metrics.Parsers
                             if ((DateTime.ParseExact(row.Timestamp, "MM/dd/yy HH:mm:ss", CultureInfo.InvariantCulture) > lastRead)
                                 && (String.Compare(row.Url, url, StringComparison.InvariantCultureIgnoreCase) == 0))
                             {
-                                yield return String.Format("http://10.55.72.184:4001/xmlResult/{0}/", row.TestId);
+                                yield return String.Format("{0}/xmlResult/{1}/", siteSection.WebPagetestHost, row.TestId);
                             }
                         }
                     }
