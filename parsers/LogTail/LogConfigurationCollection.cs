@@ -1,10 +1,11 @@
-﻿using System.Configuration;
+﻿using System.Collections.Generic;
+using System.Configuration;
 
 namespace Metrics.Parsers.LogTail
 {
     [ConfigurationCollection(typeof(LogConfigurationCollection), AddItemName = "Log",
         CollectionType = ConfigurationElementCollectionType.BasicMap)]
-    public class LogConfigurationCollection : ConfigurationElementCollection
+    public class LogConfigurationCollection : ConfigurationElementCollection, IEnumerable<LogConfigurationElement>
     {
 
         protected override ConfigurationElement CreateNewElement()
@@ -14,12 +15,20 @@ namespace Metrics.Parsers.LogTail
 
         protected override object GetElementKey(ConfigurationElement element)
         {
-            return ((LogConfigurationElement)element).Location + ((LogConfigurationElement)element).Pattern;
+            return ((LogConfigurationElement)element).Name + ((LogConfigurationElement)element).Pattern;
         }
 
         new public LogConfigurationElement this[string name]
         {
             get { return (LogConfigurationElement)BaseGet(name); }
+        }
+
+        public new IEnumerator<LogConfigurationElement> GetEnumerator()
+        {
+            foreach (var key in base.BaseGetAllKeys())
+            {
+                yield return BaseGet(key) as LogConfigurationElement;
+            }
         }
     }
 }

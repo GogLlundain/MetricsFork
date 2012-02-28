@@ -1,4 +1,3 @@
-
 # Build Folders (you can keep bin if you'd like, to store dlls and pdbs)
 bin
 obj
@@ -87,3 +86,5 @@ packages/*
 *.testsettings
 TestResult.xml
 *.VisualState.xml
+
+metrics/App.config

@@ -15,8 +15,12 @@ namespace Metrics.Parsers.LogTail
             {
                 if (regex == null)
                 {
-                    var compiled = new Regex(Expression, RegexOptions.Compiled);
-                    Interlocked.CompareExchange(ref regex, compiled, null);
+                    var section = ConfigurationManager.GetSection("LogTail") as LogConfigurationSection;
+                    if (section != null)
+                    {
+                        var compiled = new Regex(section.Patterns[ExpressionKey].Value, RegexOptions.Compiled);
+                        Interlocked.CompareExchange(ref regex, compiled, null);
+                    }
                 }
 
                 return regex;
@@ -36,19 +40,6 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
-        [ConfigurationProperty("location", IsRequired = false)]
-        public string Location
-        {
-            get
-            {
-                return (String)this["location"];
-            }
-            set
-            {
-                this["location"] = value;
-            }
-        }
-
         [ConfigurationProperty("pattern", IsRequired = false, DefaultValue = "*")]
         public string Pattern
         {
@@ -59,6 +50,19 @@ namespace Metrics.Parsers.LogTail
             set
             {
                 this["pattern"] = value;
+            }
+        }
+
+        [ConfigurationProperty("name", IsRequired = true)]
+        public string Name
+        {
+            get
+            {
+                return (String)this["name"];
+            }
+            set
+            {
+                this["name"] = value;
             }
         }
 
@@ -75,16 +79,29 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
-        [ConfigurationProperty("regex", IsRequired = true)]
-        public string Expression
+        [ConfigurationProperty("onlyToday", IsRequired = false, DefaultValue = true)]
+        public bool OnlyToday
         {
             get
             {
-                return (String)this["regex"];
+                return (bool)this["onlyToday"];
             }
             set
             {
-                this["regex"] = value;
+                this["onlyToday"] = value;
+            }
+        }
+
+        [ConfigurationProperty("regexKey", IsRequired = true)]
+        public string ExpressionKey
+        {
+            get
+            {
+                return (String)this["regexKey"];
+            }
+            set
+            {
+                this["regexKey"] = value;
             }
         }
 
@@ -92,6 +109,12 @@ namespace Metrics.Parsers.LogTail
         public KeyValueConfigurationCollection Mapping
         {
             get { return (KeyValueConfigurationCollection)this["Mapping"]; }
+        }
+
+        [ConfigurationProperty("Locations", IsRequired = true)]
+        public KeyValueConfigurationCollection Locations
+        {
+            get { return (KeyValueConfigurationCollection)this["Locations"]; }
         }
 
         [ConfigurationProperty("Stats", IsRequired = true)]

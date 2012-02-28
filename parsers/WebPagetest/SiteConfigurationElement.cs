@@ -21,6 +21,19 @@ namespace Metrics.Parsers.WebPagetest
             }
         }
 
+        [ConfigurationProperty("enableDetailedMetrics", DefaultValue = false, IsRequired = false)]
+        public bool DetailedMetrics
+        {
+            get
+            {
+                return (Boolean)this["enableDetailedMetrics"];
+            }
+            set
+            {
+                this["enableDetailedMetrics"] = value;
+            }
+        }
+
         [ConfigurationProperty("allowMultipleRuns", DefaultValue = true, IsRequired = false)]
         public bool AllowMultipleRuns
         {

@@ -1,9 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Metrics.Parsers
 {
     public interface IMetricParser
     {
-        IEnumerable<Metric> GetMetrics();
+        void GetMetrics(Action<IEnumerable<Metric>> sendMetrics);
     }
 }

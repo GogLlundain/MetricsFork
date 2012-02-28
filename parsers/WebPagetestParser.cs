@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Security.Cryptography;
-using System.Web;
+using System.Text.RegularExpressions;
 using System.Xml.XPath;
 using System.Configuration;
 using CsvHelper;
@@ -14,8 +14,9 @@ namespace Metrics.Parsers
 {
     public class WebPagetestParser : IMetricParser
     {
-
         private static SiteConfigurationSection siteSection;
+        private static readonly Regex DetailedRegexStatement = new Regex(@"^[^,]+,[^,]+,""Cleared\sCache-Run[^,]+,[^,]+,[^,]+,""(?<host>[^,]+)"",[^,]+,[^,]+,""(?<ttl>[^,]+)"",""(?<ttfb>[^,]+)"",[^,]+,[^,]+,""(?<bytes>[^,]+)""", RegexOptions.Compiled);
+
         public WebPagetestParser()
         {
             siteSection = ConfigurationManager.GetSection("WebPagetest") as SiteConfigurationSection;
@@ -25,10 +26,9 @@ namespace Metrics.Parsers
             }
         }
 
-        private IEnumerable<Metric> XmlToMetrics(SiteConfigurationElement site, IXPathNavigable result)
+        private static IEnumerable<Metric> XmlToMetrics(SiteConfigurationElement site, IXPathNavigable result)
         {
             var metrics = new List<Metric>();
-
             if (result == null)
                 throw new ArgumentNullException("result", "WebPagetest result was null");
 
@@ -37,7 +37,10 @@ namespace Metrics.Parsers
             var navigator = result.CreateNavigator();
             foreach (XPathNavigator runNavigator in navigator.Select("response/data/run"))
             {
-                string run = site.AllowMultipleRuns ? "." + runNavigator.SelectSingleNode("id").Value : String.Empty;
+                var idNode = runNavigator.SelectSingleNode("id");
+                if (idNode == null) continue;
+
+                var run = site.AllowMultipleRuns ? "." + idNode.Value : String.Empty;
 
                 //firstView
                 DoView(runNavigator, "firstView", site, run, metrics);
@@ -49,15 +52,127 @@ namespace Metrics.Parsers
                     break;
             }
 
+            if (site.DetailedMetrics)
+            {
+                metrics.AddRange(GetDetailedMerics(navigator, site));
+            }
+
             return metrics;
         }
 
-        private void DoView(XPathNavigator runNavigator, string view, SiteConfigurationElement site, string run, ICollection<Metric> metrics)
+        private static IEnumerable<Metric> GetDetailedMerics(XPathNavigator navigator, SiteConfigurationElement site)
+        {
+            var metrics = new List<Metric>();
+
+            //Get the test id
+            var node = navigator.SelectSingleNode("response/data/testId");
+            if (node == null) return metrics;
+            string testId = node.Value;
+
+            //Get the test url
+            node = navigator.SelectSingleNode("response/data/testUrl");
+            if (node == null) return metrics;
+            string testUrl = node.Value.Replace("http://", "");
+
+            //Get the run date
+            node = navigator.SelectSingleNode("response/data/run//date");
+            if (node == null) return metrics;
+            string dateTime = node.Value;
+
+            var request = WebRequest.Create(String.Format(CultureInfo.InvariantCulture, "{0}/result/{1}/{1}_{2}_requests.csv", siteSection.WebPagetestHost, testId, testUrl));
+
+            var response = (HttpWebResponse)request.GetResponse();
+            var stream = response.GetResponseStream();
+            try
+            {
+                if (stream == null)
+                {
+                    return metrics;
+                }
+
+                using (var reader = new StreamReader(stream))
+                {
+                    //null original variable to prevent double disposal
+                    stream = null;
+
+                    while (!reader.EndOfStream)
+                    {
+                        var line = reader.ReadLine();
+
+                        //Ignore blank lines
+                        if (String.IsNullOrWhiteSpace(line)) continue;
+
+                        var matches = DetailedRegexStatement.Matches(line);
+
+                        //Ignore lines that did not match
+                        if (matches.Count <= 0) continue;
+
+                        //Extract the host to group by
+                        string host = matches[0].Groups["host"].Value.Replace(".", "_");
+                        int value;
+
+                        //TTFB
+                        if (!Int32.TryParse(matches[0].Groups["ttfb"].Value, out value))
+                        {
+                            value = 0;
+                        }
+                        metrics.Add(new Metric
+                                        {
+                                            Key = String.Format(CultureInfo.InvariantCulture, "{0}.firstView.hosts.{1}.ttfb.avg", site.GraphiteKey,
+                                                                host),
+                                            Timestamp = EpochToDateTime(dateTime),
+                                            Value = value
+                                        });
+                        //TTL
+                        if (!Int32.TryParse(matches[0].Groups["ttl"].Value, out value))
+                        {
+                            value = 0;
+                        }
+
+                        metrics.Add(new Metric
+                                        {
+                                            Key = String.Format(CultureInfo.InvariantCulture, "{0}.firstView.hosts.{1}.ttl.avg", site.GraphiteKey,
+                                                                host),
+                                            Timestamp = EpochToDateTime(dateTime),
+                                            Value = value
+                                        });
+                        //Total bytes
+                        if (!Int32.TryParse(matches[0].Groups["bytes"].Value, out value))
+                        {
+                            value = 0;
+                        }
+
+                        metrics.Add(new Metric
+                                        {
+                                            Key = String.Format(CultureInfo.InvariantCulture, "{0}.firstView.hosts.{1}.bytes.count", site.GraphiteKey,
+                                                                host),
+                                            Timestamp = EpochToDateTime(dateTime),
+                                            Value = value
+                                        });
+                    }
+                }
+            }
+            finally
+            {
+                if (stream != null)
+                {
+                    stream.Dispose();
+                }
+            }
+
+            return metrics;
+        }
+
+
+        private static void DoView(XPathNavigator runNavigator, string view, SiteConfigurationElement site, string run, List<Metric> metrics)
         {
             var viewNavigator = runNavigator.SelectSingleNode(view + "/results");
             if (viewNavigator != null)
             {
-                string dateTime = viewNavigator.SelectSingleNode("date").Value;
+                var node = viewNavigator.SelectSingleNode("date");
+                if (node == null) return;
+
+                string dateTime = node.Value;
                 foreach (XPathNavigator metric in viewNavigator.SelectChildren(XPathNodeType.Element))
                 {
                     int numericValue;
@@ -66,7 +181,7 @@ namespace Metrics.Parsers
                         metrics.Add(new Metric
                                         {
                                             Key =
-                                                String.Format("{0}.{1}{2}.{3}", site.GraphiteKey,
+                                                String.Format(CultureInfo.InvariantCulture, "{0}.{1}{2}.{3}", site.GraphiteKey,
                                                               view, run, metric.Name),
                                             Timestamp = EpochToDateTime(dateTime),
                                             Value = numericValue
@@ -78,47 +193,60 @@ namespace Metrics.Parsers
 
         private static DateTime EpochToDateTime(string epoch)
         {
-            var seconds = Int64.Parse(epoch);
+            var seconds = Int64.Parse(epoch, CultureInfo.InvariantCulture);
             var dt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
             dt = dt.AddSeconds(seconds);
             return dt;
         }
 
-        private DateTime GetLastDateRead(string graphiteKey)
+        private static DateTime GetLastDateRead(string graphiteKey)
         {
             using (var md5 = MD5.Create())
             {
-                var tempName = "wpt_" + LogTailParser.GetMd5HashFileName(md5, graphiteKey);
+                var tempName = "wpt_" + LogTailParser.GetMD5HashFileName(md5, graphiteKey);
                 if (!File.Exists(tempName))
                 {
                     return DateTime.MinValue;
                 }
 
-                DateTime lastRead;
-                DateTime.TryParse(File.ReadAllText(tempName), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out lastRead);
-                return lastRead;
+                try
+                {
+                    DateTime lastRead;
+                    var lines = File.ReadAllLines(tempName);
+                    if (DateTime.TryParse(lines[0], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal,
+                                      out lastRead))
+                    {
+                        return lastRead;
+                    }
+
+                    return DateTime.MinValue;
+                }
+                catch
+                {
+                    return DateTime.MinValue;
+                }
             }
         }
 
-        private void StoreLastDateRead(string graphiteKey, DateTime lastRead)
+        private static void StoreLastDateRead(string graphiteKey, DateTime lastRead)
         {
             using (var md5 = MD5.Create())
             {
-                var tempName = "wpt_" + LogTailParser.GetMd5HashFileName(md5, graphiteKey);
-                File.WriteAllText(tempName, lastRead.ToString(CultureInfo.InvariantCulture));
+                var tempName = "wpt_" + LogTailParser.GetMD5HashFileName(md5, graphiteKey);
+                File.WriteAllText(tempName, lastRead.ToString(CultureInfo.InvariantCulture) + Environment.NewLine + graphiteKey);
             }
         }
 
-        public IEnumerable<Metric> GetMetrics()
+        public void GetMetrics(Action<IEnumerable<Metric>> sendMetrics)
         {
-            var metrics = new List<Metric>();
             foreach (SiteConfigurationElement site in siteSection.Sites)
             {
                 foreach (var resultUrl in GetResultUrls(site.Url, GetLastDateRead(site.GraphiteKey)))
                 {
                     try
                     {
-                        metrics.AddRange(XmlToMetrics(site, new XPathDocument(resultUrl)));
+                        var metrics = XmlToMetrics(site, new XPathDocument(resultUrl));
+                        sendMetrics(metrics);
                     }
                     catch
                     {
@@ -129,13 +257,11 @@ namespace Metrics.Parsers
                     }
                 }
             }
-
-            return metrics;
         }
 
         private static IEnumerable<string> GetResultUrls(string url, DateTime lastRead)
         {
-            double difference = Math.Ceiling(DateTime.Now.Subtract(lastRead).TotalDays);
+            var difference = Math.Ceiling(DateTime.Now.Subtract(lastRead).TotalDays);
             if (difference > 365)
                 difference = 365;
 
