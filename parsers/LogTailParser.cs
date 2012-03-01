@@ -7,8 +7,6 @@ using System.IO;
 using System.Threading.Tasks;
 using Metrics.Parsers.LogTail;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 
 [assembly: CLSCompliant(true)]
 namespace Metrics.Parsers
@@ -16,103 +14,40 @@ namespace Metrics.Parsers
     public class LogTailParser : IMetricParser
     {
         private readonly LogConfigurationCollection logs;
+        private readonly OffsetCursor<long> cursor;
+        private GraphiteClient graphiteClient;
 
         public LogTailParser()
         {
             var section = ConfigurationManager.GetSection("LogTail") as LogConfigurationSection;
+            cursor = new OffsetCursor<long>("log");
             if (section != null)
             {
                 logs = section.Logs;
             }
         }
 
-        private static long GetLastByteRead(string filePath)
+
+
+        public IEnumerable<string> GetMetrics(GraphiteClient client)
         {
-            try
-            {
-                using (var md5 = MD5.Create())
-                {
-                    string tempName = GetMD5HashFileName(md5, filePath);
-                    if (!File.Exists(tempName))
-                    {
-                        return 0;
-                    }
+            graphiteClient = client;
 
-                    long offset;
-                    var lines = File.ReadAllLines(tempName);
-                    if (Int64.TryParse(lines[0], out offset))
-                    {
-                        return offset;
-                    }
-                    return 0;
-                }
-            }
-            catch
-            {
-                return 0;
-            }
-        }
-
-        private static void StoreLastByteRead(string filePath, long offset)
-        {
-            using (var md5 = MD5.Create())
-            {
-                var tempName = GetMD5HashFileName(md5, filePath);
-                File.WriteAllText(tempName, offset.ToString(CultureInfo.InvariantCulture) + Environment.NewLine + filePath);
-            }
-        }
-
-        /// <summary>
-        /// Get an MD5 hased filename to store the last read byte
-        /// http://msdn.microsoft.com/en-us/library/system.security.cryptography.md5.aspx
-        /// </summary>
-        public static string GetMD5HashFileName(HashAlgorithm hashAlgorithm, string input)
-        {
-            //Validate inputs
-            if (hashAlgorithm == null)
-            {
-                throw new ArgumentNullException("hashAlgorithm", "Hash algorithm cannot be null");
-            }
-            if (String.IsNullOrWhiteSpace(input))
-            {
-                throw new ArgumentNullException("input", "Input cannot be null");
-            }
-
-            // Convert the input string to a byte array and compute the hash.
-            var data = hashAlgorithm.ComputeHash(Encoding.UTF8.GetBytes(input));
-
-            // Create a new Stringbuilder to collect the bytes
-            // and create a string.
-            var sBuilder = new StringBuilder();
-
-            // Loop through each byte of the hashed data 
-            // and format each one as a hexadecimal string.
-            for (int i = 0; i < data.Length; i++)
-            {
-                sBuilder.Append(data[i].ToString("x2", CultureInfo.InvariantCulture));
-            }
-
-            // Return the hexadecimal string.
-            return sBuilder + ".offset";
-        }
-
-
-        public void GetMetrics(Action<IEnumerable<Metric>> sendMetrics)
-        {
             Parallel.ForEach(logs, log =>
                                        {
                                            foreach (var locationKey in log.Locations.AllKeys)
                                            {
                                                foreach (var file in Directory.GetFiles(log.Locations[locationKey].Value, log.Pattern))
                                                {
-                                                   ReadTail(file, log, locationKey, sendMetrics);
+                                                   ReadTail(file, log, locationKey);
                                                }
                                            }
                                        });
 
+            return cursor.GetUsedOffsetFiles();
         }
 
-        private static void ReadTail(string file, LogConfigurationElement log, string locationKey, Action<IEnumerable<Metric>> sendMetrics)
+        private void ReadTail(string file, LogConfigurationElement log, string locationKey)
         {
             var rawValues = new ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>>();
 
@@ -133,7 +68,7 @@ namespace Metrics.Parsers
                 return;
             }
 
-            var offset = GetLastByteRead(file);
+            var offset = cursor.GetLastRead(file);
             long lastPosition = offset;
 
             //If file hasnt changed, don't bother opening
@@ -174,11 +109,18 @@ namespace Metrics.Parsers
                         //Flush every 1000 lines to minimise memory footprint
                         if (lineCount >= 1000)
                         {
-                            CollateAndSend(log, rawValues, file, lastPosition, sendMetrics);
+                            //send a debug metric
+                            graphiteClient.SendQuickMetric("metrics.logLines.count", (int)lineCount);
+
+                            //send real metrics to graphite
+                            CollateAndSend(log, rawValues, file, lastPosition);
                             rawValues.Clear();
                             lineCount = 0;
                         }
                     }
+
+                    //send a debug metric
+                    graphiteClient.SendQuickMetric("metrics.logLines.count", (int)lineCount);
                 }
             }
             finally
@@ -189,11 +131,11 @@ namespace Metrics.Parsers
                 }
             }
 
-            CollateAndSend(log, rawValues, file, lastPosition, sendMetrics);
+            CollateAndSend(log, rawValues, file, lastPosition);
         }
 
-        private static void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues,
-            string file, long lastPosition, Action<IEnumerable<Metric>> sendMetrics)
+        private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues,
+            string file, long lastPosition)
         {
             var metrics = new List<Metric>();
 
@@ -235,12 +177,11 @@ namespace Metrics.Parsers
                 }
             }
 
-            StoreLastByteRead(file, lastPosition);
-            sendMetrics(metrics);
+            cursor.StoreLastRead(file, lastPosition);
+            graphiteClient.SendMetrics(metrics);
         }
 
-        private static void ParseLine(LogConfigurationElement log, string line,
-            ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues, string locationKey)
+        private void ParseLine(LogConfigurationElement log, string line, ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues, string locationKey)
         {
             var matches = log.CompiledRegex.Matches(line);
 
@@ -267,12 +208,14 @@ namespace Metrics.Parsers
 
                     try
                     {
+                        var dateTime = DateTime.ParseExact(matches[0].Groups[stat.Interval].Value,
+                                                           stat.DateFormat, CultureInfo.InvariantCulture);
+
+                        //Create metric
                         var metric = new Metric
                                          {
                                              Key = key,
-                                             Timestamp =
-                                                 DateTime.ParseExact(matches[0].Groups[stat.Interval].Value,
-                                                                     stat.DateFormat, CultureInfo.InvariantCulture)
+                                             Timestamp = dateTime
                                          };
                         if (!String.IsNullOrEmpty(stat.Value))
                         {
@@ -288,7 +231,7 @@ namespace Metrics.Parsers
                     }
                     catch
                     {
-                        //TODO : send error metric
+                        graphiteClient.SendQuickMetric("metrics.runTime.avg", 1);
                     }
                 }
             }

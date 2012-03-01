@@ -16,10 +16,12 @@ namespace Metrics.Parsers
     {
         private static SiteConfigurationSection siteSection;
         private static readonly Regex DetailedRegexStatement = new Regex(@"^[^,]+,[^,]+,""Cleared\sCache-Run[^,]+,[^,]+,[^,]+,""(?<host>[^,]+)"",[^,]+,[^,]+,""(?<ttl>[^,]+)"",""(?<ttfb>[^,]+)"",[^,]+,[^,]+,""(?<bytes>[^,]+)""", RegexOptions.Compiled);
+        private readonly OffsetCursor<DateTime> cursor;
 
         public WebPagetestParser()
         {
             siteSection = ConfigurationManager.GetSection("WebPagetest") as SiteConfigurationSection;
+            cursor = new OffsetCursor<DateTime>("wpt");
             if (siteSection == null)
             {
                 throw new InvalidOperationException("No site section found for webpagetest");
@@ -199,64 +201,28 @@ namespace Metrics.Parsers
             return dt;
         }
 
-        private static DateTime GetLastDateRead(string graphiteKey)
-        {
-            using (var md5 = MD5.Create())
-            {
-                var tempName = "wpt_" + LogTailParser.GetMD5HashFileName(md5, graphiteKey);
-                if (!File.Exists(tempName))
-                {
-                    return DateTime.MinValue;
-                }
-
-                try
-                {
-                    DateTime lastRead;
-                    var lines = File.ReadAllLines(tempName);
-                    if (DateTime.TryParse(lines[0], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal,
-                                      out lastRead))
-                    {
-                        return lastRead;
-                    }
-
-                    return DateTime.MinValue;
-                }
-                catch
-                {
-                    return DateTime.MinValue;
-                }
-            }
-        }
-
-        private static void StoreLastDateRead(string graphiteKey, DateTime lastRead)
-        {
-            using (var md5 = MD5.Create())
-            {
-                var tempName = "wpt_" + LogTailParser.GetMD5HashFileName(md5, graphiteKey);
-                File.WriteAllText(tempName, lastRead.ToString(CultureInfo.InvariantCulture) + Environment.NewLine + graphiteKey);
-            }
-        }
-
-        public void GetMetrics(Action<IEnumerable<Metric>> sendMetrics)
+        public IEnumerable<string> GetMetrics(GraphiteClient client)
         {
             foreach (SiteConfigurationElement site in siteSection.Sites)
             {
-                foreach (var resultUrl in GetResultUrls(site.Url, GetLastDateRead(site.GraphiteKey)))
+                foreach (var resultUrl in GetResultUrls(site.Url, cursor.GetLastRead(site.GraphiteKey)))
                 {
                     try
                     {
                         var metrics = XmlToMetrics(site, new XPathDocument(resultUrl));
-                        sendMetrics(metrics);
+                        client.SendMetrics(metrics);
                     }
                     catch
                     {
                     }
                     finally
                     {
-                        StoreLastDateRead(site.GraphiteKey, DateTime.Now);
+                        cursor.StoreLastRead(site.GraphiteKey, DateTime.Now);
                     }
                 }
             }
+
+            return cursor.GetUsedOffsetFiles();
         }
 
         private static IEnumerable<string> GetResultUrls(string url, DateTime lastRead)
