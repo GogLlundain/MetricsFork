@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace Metrics.Parsers
 {
-    public class OffsetCursor<T> where T : IConvertible
+    public class OffsetCursor<T>
     {
         private readonly ConcurrentBag<string> filesUsed;
         private readonly string prefix;
