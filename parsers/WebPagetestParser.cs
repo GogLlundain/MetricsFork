@@ -9,6 +9,7 @@ using System.Xml.XPath;
 using System.Configuration;
 using CsvHelper;
 using Metrics.Parsers.WebPagetest;
+using PublicSuffix;
 
 namespace Metrics.Parsers
 {
@@ -17,6 +18,7 @@ namespace Metrics.Parsers
         private static SiteConfigurationSection siteSection;
         private static readonly Regex DetailedRegexStatement = new Regex(@"^[^,]+,[^,]+,""Cleared\sCache-Run[^,]+,[^,]+,[^,]+,""(?<host>[^,]+)"",[^,]+,[^,]+,""(?<ttl>[^,]+)"",""(?<ttfb>[^,]+)"",[^,]+,[^,]+,""(?<bytes>[^,]+)""", RegexOptions.Compiled);
         private readonly OffsetCursor<DateTime> cursor;
+        private static Parser parser;
 
         public WebPagetestParser()
         {
@@ -26,6 +28,7 @@ namespace Metrics.Parsers
             {
                 throw new InvalidOperationException("No site section found for webpagetest");
             }
+
         }
 
         private static IEnumerable<Metric> XmlToMetrics(SiteConfigurationElement site, IXPathNavigable result)
@@ -60,6 +63,22 @@ namespace Metrics.Parsers
             }
 
             return metrics;
+        }
+
+
+        private static string GetSubDomain(string url)
+        {
+            if (parser != null)
+            {
+                // parse urls into Domain objects
+                var domain = parser.Parse(url);
+                if (domain.IsValid)
+                {
+                    return domain.RegisteredDomain;
+                }
+            }
+
+            return null;
         }
 
         private static IEnumerable<Metric> GetDetailedMerics(XPathNavigator navigator, SiteConfigurationElement site)
@@ -110,7 +129,13 @@ namespace Metrics.Parsers
                         if (matches.Count <= 0) continue;
 
                         //Extract the host to group by
-                        string host = matches[0].Groups["host"].Value.Replace(".", "_");
+                        string host = GetSubDomain("http://" + matches[0].Groups["host"].Value);
+                        if (host == null)
+                        {
+                            host = matches[0].Groups["host"].Value;
+                        }
+                        host = host.Replace(".", "_");
+
                         int value;
 
                         //TTFB
@@ -203,6 +228,14 @@ namespace Metrics.Parsers
 
         public IEnumerable<string> GetMetrics(GraphiteClient client)
         {
+            //Load the domain parser rule set
+            if ((File.Exists("effective_tld_names.dat")) && (parser == null))
+            {
+                var list = new RulesList(); // get a new rules list
+                var rules = list.FromFile(@"effective_tld_names.dat");  // parse a local copy of the publicsuffix.org file
+                parser = new Parser(rules); // create an instance of the parser
+            }
+
             foreach (SiteConfigurationElement site in siteSection.Sites)
             {
                 foreach (var resultUrl in GetResultUrls(site.Url, cursor.GetLastRead(site.GraphiteKey)))

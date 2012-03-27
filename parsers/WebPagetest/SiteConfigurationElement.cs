@@ -34,7 +34,7 @@ namespace Metrics.Parsers.WebPagetest
             }
         }
 
-        [ConfigurationProperty("allowMultipleRuns", DefaultValue = true, IsRequired = false)]
+        [ConfigurationProperty("allowMultipleRuns", DefaultValue = false, IsRequired = false)]
         public bool AllowMultipleRuns
         {
             get
