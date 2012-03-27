@@ -66,6 +66,7 @@
     <Compile Include="Metric.cs" />
     <Compile Include="OffsetCursor.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="WebPagetest\DetailedWebpagetestRow.cs" />
     <Compile Include="WebPagetest\SiteConfigurationElement.cs" />
     <Compile Include="WebPagetest\SiteConfigurationCollection.cs" />
     <Compile Include="WebPagetest\SiteConfigurationSection.cs" />
