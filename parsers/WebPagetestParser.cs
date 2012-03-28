@@ -10,6 +10,10 @@ using System.Configuration;
 using CsvHelper;
 using Metrics.Parsers.WebPagetest;
 using PublicSuffix;
+using System.Threading.Tasks;
+using System.Collections;
+using System.Linq;
+using System.Web;
 
 namespace Metrics.Parsers
 {
@@ -99,122 +103,128 @@ namespace Metrics.Parsers
             if (node == null) return metrics;
             string dateTime = node.Value;
 
-            var request = WebRequest.Create(String.Format(CultureInfo.InvariantCulture, "{0}/result/{1}/{1}_{2}_requests.csv", siteSection.WebPagetestHost, testId, testUrl));
+            var request = WebRequest.Create(String.Format(CultureInfo.InvariantCulture, "{0}/result/{1}/{1}_{2}_requests.csv", siteSection.WebPagetestHost, testId, HttpUtility.UrlEncode(testUrl)));
 
-            var response = (HttpWebResponse)request.GetResponse();
-            var stream = response.GetResponseStream();
             try
             {
-                if (stream == null)
+                var response = (HttpWebResponse)request.GetResponse();
+                var stream = response.GetResponseStream();
+                try
                 {
-                    return metrics;
-                }
-
-                using (var reader = new CsvReader(new StreamReader(stream)))
-                {
-                    stream = null;
-
-                    foreach (var row in reader.GetRecords<DetailedWebpagetestRow>())
+                    if (stream == null)
                     {
-                        if (String.IsNullOrEmpty(row.Host))
-                        {
-                            continue;
-                        }
+                        return metrics;
+                    }
 
-                        //Extract the host to group by
-                        string host = GetSubDomain("http://" + row.Host);
-                        if (host == null)
-                        {
-                            host = row.Host;
-                        }
-                        host = host.Replace(".", "_");
+                    using (var reader = new CsvReader(new StreamReader(stream)))
+                    {
+                        stream = null;
 
-                        //Get the run type
-                        string runType = "firstView";
-                        if (row.EventName.StartsWith("Cached"))
+                        foreach (var row in reader.GetRecords<DetailedWebpagetestRow>())
                         {
-                            runType = "repeatView";
-                        }
+                            if (String.IsNullOrEmpty(row.Host))
+                            {
+                                continue;
+                            }
 
-                        //TTFB - By Host
-                        metrics.Add(new Metric
-                        {
-                            Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.ttfb", site.GraphiteKey, runType, host),
-                            Timestamp = EpochToDateTime(dateTime),
-                            Value = row.TimeToFirstByte
-                        });
-                        //TTFB - By MIME Type
-                        if (!String.IsNullOrEmpty(row.ContentType))
-                        {
+                            //Extract the host to group by
+                            string host = GetSubDomain("http://" + row.Host);
+                            if (host == null)
+                            {
+                                host = row.Host;
+                            }
+                            host = host.Replace(".", "_");
+
+                            //Get the run type
+                            string runType = "firstView";
+                            if (row.EventName.StartsWith("Cached"))
+                            {
+                                runType = "repeatView";
+                            }
+
+                            //TTFB - By Host
                             metrics.Add(new Metric
                             {
-                                Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.ttfb", site.GraphiteKey, runType, row.ContentType),
+                                Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.ttfb", site.GraphiteKey, runType, host),
                                 Timestamp = EpochToDateTime(dateTime),
                                 Value = row.TimeToFirstByte
                             });
-                        }
+                            //TTFB - By MIME Type
+                            if (!String.IsNullOrEmpty(row.ContentType))
+                            {
+                                metrics.Add(new Metric
+                                {
+                                    Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.ttfb", site.GraphiteKey, runType, row.ContentType),
+                                    Timestamp = EpochToDateTime(dateTime),
+                                    Value = row.TimeToFirstByte
+                                });
+                            }
 
-                        //TTL - By Host
-                        metrics.Add(new Metric
-                        {
-                            Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.ttl", site.GraphiteKey, runType, host),
-                            Timestamp = EpochToDateTime(dateTime),
-                            Value = row.TimeToLoad
-                        });
-                        //TTL - By MIME Type
-                        if (!String.IsNullOrEmpty(row.ContentType))
-                        {
+                            //TTL - By Host
                             metrics.Add(new Metric
                             {
-                                Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.ttl", site.GraphiteKey, runType, row.ContentType),
+                                Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.ttl", site.GraphiteKey, runType, host),
                                 Timestamp = EpochToDateTime(dateTime),
                                 Value = row.TimeToLoad
                             });
-                        }
+                            //TTL - By MIME Type
+                            if (!String.IsNullOrEmpty(row.ContentType))
+                            {
+                                metrics.Add(new Metric
+                                {
+                                    Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.ttl", site.GraphiteKey, runType, row.ContentType),
+                                    Timestamp = EpochToDateTime(dateTime),
+                                    Value = row.TimeToLoad
+                                });
+                            }
 
-                        //Total bytes - By Host
-                        metrics.Add(new Metric
-                        {
-                            Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.bytes.count", site.GraphiteKey, runType, host),
-                            Timestamp = EpochToDateTime(dateTime),
-                            Value = row.Bytes
-                        });
-                        //Total bytes - By MIME Type
-                        if (!String.IsNullOrEmpty(row.ContentType))
-                        {
+                            //Total bytes - By Host
                             metrics.Add(new Metric
                             {
-                                Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.bytes.count", site.GraphiteKey, runType, row.ContentType),
+                                Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.bytes.count", site.GraphiteKey, runType, host),
                                 Timestamp = EpochToDateTime(dateTime),
                                 Value = row.Bytes
                             });
-                        }
-                        //Avg bytes - By Host
-                        metrics.Add(new Metric
-                        {
-                            Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.bytes.avg", site.GraphiteKey, runType, host),
-                            Timestamp = EpochToDateTime(dateTime),
-                            Value = row.Bytes
-                        });
-                        //Avg bytes - By MIME Type
-                        if (!String.IsNullOrEmpty(row.ContentType))
-                        {
+                            //Total bytes - By MIME Type
+                            if (!String.IsNullOrEmpty(row.ContentType))
+                            {
+                                metrics.Add(new Metric
+                                {
+                                    Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.bytes.count", site.GraphiteKey, runType, row.ContentType),
+                                    Timestamp = EpochToDateTime(dateTime),
+                                    Value = row.Bytes
+                                });
+                            }
+                            //Avg bytes - By Host
                             metrics.Add(new Metric
                             {
-                                Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.bytes.avg", site.GraphiteKey, runType, row.ContentType),
+                                Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.bytes.avg", site.GraphiteKey, runType, host),
                                 Timestamp = EpochToDateTime(dateTime),
                                 Value = row.Bytes
                             });
+                            //Avg bytes - By MIME Type
+                            if (!String.IsNullOrEmpty(row.ContentType))
+                            {
+                                metrics.Add(new Metric
+                                {
+                                    Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.bytes.avg", site.GraphiteKey, runType, row.ContentType),
+                                    Timestamp = EpochToDateTime(dateTime),
+                                    Value = row.Bytes
+                                });
+                            }
                         }
                     }
                 }
-            }
-            finally
-            {
-                if (stream != null)
+                finally
                 {
-                    stream.Dispose();
+                    if (stream != null)
+                    {
+                        stream.Dispose();
+                    }
                 }
+            }
+            catch
+            {
             }
 
             return metrics;
@@ -266,7 +276,7 @@ namespace Metrics.Parsers
                 parser = new Parser(rules); // create an instance of the parser
             }
 
-            foreach (SiteConfigurationElement site in siteSection.Sites)
+            Parallel.ForEach(siteSection.Sites.OfType<SiteConfigurationElement>(), (site) =>
             {
                 foreach (var resultUrl in GetResultUrls(site.Url, cursor.GetLastRead(site.GraphiteKey)))
                 {
@@ -288,7 +298,7 @@ namespace Metrics.Parsers
                         cursor.StoreLastRead(site.GraphiteKey, DateTime.Now);
                     }
                 }
-            }
+            });
 
             return cursor.GetUsedOffsetFiles();
         }
@@ -298,6 +308,8 @@ namespace Metrics.Parsers
             var difference = Math.Ceiling(DateTime.Now.Subtract(lastRead).TotalDays);
             if (difference > 365)
                 difference = 365;
+
+            var results = new List<string>();
 
             var request = WebRequest.Create(String.Format("{0}/testlog.php?days={1:F0}&private=1&filter={2}&f=csv", siteSection.WebPagetestHost, (int)difference, url));
 
@@ -313,14 +325,16 @@ namespace Metrics.Parsers
                             if ((DateTime.ParseExact(row.Timestamp, "MM/dd/yy HH:mm:ss", CultureInfo.InvariantCulture) > lastRead)
                                 && (String.Compare(row.Url, url, StringComparison.InvariantCultureIgnoreCase) == 0))
                             {
-                                yield return String.Format("{0}/xmlResult/{1}/", siteSection.WebPagetestHost, row.TestId);
+                                results.Add(String.Format("{0}/xmlResult/{1}/", siteSection.WebPagetestHost, row.TestId));
                             }
                         }
                     }
                 }
             }
 
-            yield return null;
+            //Reverse the list so we do the earliest first
+            results.Reverse();
+            return results;
         }
     }
 }
