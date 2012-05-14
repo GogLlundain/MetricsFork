@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Metrics.Parsers.LogTail;
-using System.Linq;
 
 [assembly: CLSCompliant(true)]
 namespace Metrics.Parsers
@@ -26,8 +26,6 @@ namespace Metrics.Parsers
                 logs = section.Logs;
             }
         }
-
-
 
         public IEnumerable<string> GetMetrics(GraphiteClient client)
         {
@@ -131,6 +129,7 @@ namespace Metrics.Parsers
                 }
             }
 
+            graphiteClient.SendQuickMetric("metrics.logLines.count", rawValues.Count);
             CollateAndSend(log, rawValues, file, lastPosition);
         }
 

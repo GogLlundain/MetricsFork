@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Configuration;
 using Graphite;
 
 namespace Metrics.Parsers

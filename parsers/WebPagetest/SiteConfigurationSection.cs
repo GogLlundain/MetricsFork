@@ -23,5 +23,18 @@ namespace Metrics.Parsers.WebPagetest
                 this["wptHost"] = value;
             }
         }
+
+        [ConfigurationProperty("keysToKeep", IsRequired = false)]
+        public string KeysToKeep
+        {
+            get
+            {
+                return (String)this["keysToKeep"];
+            }
+            set
+            {
+                this["keysToKeep"] = value;
+            }
+        }
     }
 }

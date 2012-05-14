@@ -6,6 +6,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Linq;
+using System.Collections;
 
 namespace Metrics.Parsers
 {
@@ -31,10 +32,21 @@ namespace Metrics.Parsers
             {
                 var tempName = prefix + GetMD5HashFileName(md5, uniqueName);
 
-                File.WriteAllText(tempName, GetOffsetValue(offset) + Environment.NewLine + uniqueName);
+                //if its a string value we don't write the helper name in the file
+                if (offset is String)
+                {
+                    File.WriteAllText(tempName, GetOffsetValue(offset));
+                }
+                else
+                {
+                    File.WriteAllText(tempName, GetOffsetValue(offset) + Environment.NewLine + uniqueName);
+                }
 
                 //Remember we accessed this file to avoid clean up
-                filesUsed.Add(tempName);
+                if (!filesUsed.Contains(tempName))
+                {
+                    filesUsed.Add(tempName);
+                }
             }
         }
 
@@ -57,11 +69,21 @@ namespace Metrics.Parsers
                     }
 
                     //Remember we accessed this file to avoid clean up
-                    filesUsed.Add(tempName);
+                    if (!filesUsed.Contains(tempName))
+                    {
+                        filesUsed.Add(tempName);
+                    }
 
                     var lines = File.ReadAllLines(tempName);
 
-                    return ConvertType(lines[0]);
+                    if (typeof(T) == typeof(String))
+                    {
+                        return ConvertType(String.Join(Environment.NewLine, lines));
+                    }
+                    else
+                    {
+                        return ConvertType(lines[0]);
+                    }
                 }
             }
             catch
