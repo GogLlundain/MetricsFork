@@ -36,5 +36,18 @@ namespace Metrics.Parsers.WebPagetest
                 this["keysToKeep"] = value;
             }
         }
+
+        [ConfigurationProperty("assumeLocalTimeZone", IsRequired = false, DefaultValue = false)]
+        public bool AssumeLocalTimeZone
+        {
+            get
+            {
+                return (bool)this["assumeLocalTimeZone"];
+            }
+            set
+            {
+                this["assumeLocalTimeZone"] = value;
+            }
+        }
     }
 }

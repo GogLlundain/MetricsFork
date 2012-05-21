@@ -46,29 +46,33 @@ namespace Metrics.Parsers
             if (result == null)
                 throw new ArgumentNullException("result", "WebPagetest result was null");
 
-            //TODO : check status codes
-
             var navigator = result.CreateNavigator();
-            foreach (XPathNavigator runNavigator in navigator.Select("response/data/run"))
+
+            //Check test is completed
+            var code = navigator.SelectSingleNode("response/statusCode");
+            if (code.Value == "200")
             {
-                var idNode = runNavigator.SelectSingleNode("id");
-                if (idNode == null) continue;
+                foreach (XPathNavigator runNavigator in navigator.Select("response/data/run"))
+                {
+                    var idNode = runNavigator.SelectSingleNode("id");
+                    if (idNode == null) continue;
 
-                var run = site.AllowMultipleRuns ? "." + idNode.Value : String.Empty;
+                    var run = site.AllowMultipleRuns ? "." + idNode.Value : String.Empty;
 
-                //firstView
-                DoView(runNavigator, "firstView", site, run, metrics, keysToKeep);
+                    //firstView
+                    DoView(runNavigator, "firstView", site, run, metrics, keysToKeep);
 
-                //repeatView
-                DoView(runNavigator, "repeatView", site, run, metrics, keysToKeep);
+                    //repeatView
+                    DoView(runNavigator, "repeatView", site, run, metrics, keysToKeep);
 
-                if (!site.AllowMultipleRuns)
-                    break;
-            }
+                    if (!site.AllowMultipleRuns)
+                        break;
+                }
 
-            if (site.DetailedMetrics)
-            {
-                metrics.AddRange(GetDetailedMerics(navigator, site));
+                if (site.DetailedMetrics)
+                {
+                    metrics.AddRange(GetDetailedMerics(navigator, site));
+                }
             }
 
             return metrics;
@@ -108,6 +112,7 @@ namespace Metrics.Parsers
             node = navigator.SelectSingleNode("response/data/run//date");
             if (node == null) return metrics;
             string dateTime = node.Value;
+            var timeStamp = EpochToDateTime(dateTime, siteSection.AssumeLocalTimeZone);
 
             var request = WebRequest.Create(String.Format(CultureInfo.InvariantCulture, "{0}/result/{1}/{1}_{2}_requests.csv", siteSection.WebPagetestHost, testId, HttpUtility.UrlEncode(testUrl)));
             request.Timeout = 5000;
@@ -150,7 +155,7 @@ namespace Metrics.Parsers
                         metrics.Add(new Metric
                         {
                             Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.ttfb", site.GraphiteKey, runType, host),
-                            Timestamp = EpochToDateTime(dateTime),
+                            Timestamp = timeStamp,
                             Value = row.TimeToFirstByte
                         });
                         //TTFB - By MIME Type
@@ -159,7 +164,7 @@ namespace Metrics.Parsers
                             metrics.Add(new Metric
                             {
                                 Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.ttfb", site.GraphiteKey, runType, row.ContentType),
-                                Timestamp = EpochToDateTime(dateTime),
+                                Timestamp = timeStamp,
                                 Value = row.TimeToFirstByte
                             });
                         }
@@ -168,7 +173,7 @@ namespace Metrics.Parsers
                         metrics.Add(new Metric
                         {
                             Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.ttl", site.GraphiteKey, runType, host),
-                            Timestamp = EpochToDateTime(dateTime),
+                            Timestamp = timeStamp,
                             Value = row.TimeToLoad
                         });
                         //TTL - By MIME Type
@@ -177,7 +182,7 @@ namespace Metrics.Parsers
                             metrics.Add(new Metric
                             {
                                 Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.ttl", site.GraphiteKey, runType, row.ContentType),
-                                Timestamp = EpochToDateTime(dateTime),
+                                Timestamp = timeStamp,
                                 Value = row.TimeToLoad
                             });
                         }
@@ -186,7 +191,7 @@ namespace Metrics.Parsers
                         metrics.Add(new Metric
                         {
                             Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.bytes.count", site.GraphiteKey, runType, host),
-                            Timestamp = EpochToDateTime(dateTime),
+                            Timestamp = timeStamp,
                             Value = row.Bytes
                         });
                         //Total bytes - By MIME Type
@@ -195,7 +200,7 @@ namespace Metrics.Parsers
                             metrics.Add(new Metric
                             {
                                 Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.bytes.count", site.GraphiteKey, runType, row.ContentType),
-                                Timestamp = EpochToDateTime(dateTime),
+                                Timestamp = timeStamp,
                                 Value = row.Bytes
                             });
                         }
@@ -203,7 +208,7 @@ namespace Metrics.Parsers
                         metrics.Add(new Metric
                         {
                             Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byHost.{2}.bytes.avg", site.GraphiteKey, runType, host),
-                            Timestamp = EpochToDateTime(dateTime),
+                            Timestamp = timeStamp,
                             Value = row.Bytes
                         });
                         //Avg bytes - By MIME Type
@@ -212,7 +217,7 @@ namespace Metrics.Parsers
                             metrics.Add(new Metric
                             {
                                 Key = String.Format(CultureInfo.InvariantCulture, "{0}.{1}.byType.{2}.bytes.avg", site.GraphiteKey, runType, row.ContentType),
-                                Timestamp = EpochToDateTime(dateTime),
+                                Timestamp = timeStamp,
                                 Value = row.Bytes
                             });
                         }
@@ -240,6 +245,7 @@ namespace Metrics.Parsers
                 if (node == null) return;
 
                 string dateTime = node.Value;
+                var timeStamp = EpochToDateTime(dateTime, siteSection.AssumeLocalTimeZone);
                 foreach (XPathNavigator metric in viewNavigator.SelectChildren(XPathNodeType.Element))
                 {
                     if ((keysToKeep != null) && (!keysToKeep.Contains(metric.Name)))
@@ -255,7 +261,7 @@ namespace Metrics.Parsers
                                             Key =
                                                 String.Format(CultureInfo.InvariantCulture, "{0}.{1}{2}.{3}", site.GraphiteKey,
                                                               view, run, metric.Name),
-                                            Timestamp = EpochToDateTime(dateTime),
+                                            Timestamp = timeStamp,
                                             Value = numericValue
                                         });
                     }
@@ -263,10 +269,20 @@ namespace Metrics.Parsers
             }
         }
 
-        private static DateTime EpochToDateTime(string epoch)
+        private static DateTime EpochToDateTime(string epoch, bool assumeLocal)
         {
             var seconds = Int64.Parse(epoch, CultureInfo.InvariantCulture);
-            var dt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+            DateTime dt;
+
+            //Seems to be a WPT bug where the epochs are calculated from local not UTC
+            if (assumeLocal)
+            {
+                dt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Local);
+            }
+            else
+            {
+                dt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+            }
             dt = dt.AddSeconds(seconds);
             return dt;
         }
@@ -290,9 +306,7 @@ namespace Metrics.Parsers
                         {
                             try
                             {
-                                var metrics = XmlToMetrics(site,
-                                                            new XPathDocument
-                                                                (resultUrl));
+                                var metrics = XmlToMetrics(site, new XPathDocument(resultUrl));
                                 if (metrics.Any())
                                 {
                                     client.SendMetrics(metrics);
