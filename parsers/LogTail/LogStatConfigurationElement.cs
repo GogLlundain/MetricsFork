@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Linq;
 using System.Configuration;
+using System.Collections.Generic;
 
 namespace Metrics.Parsers.LogTail
 {
@@ -67,6 +69,32 @@ namespace Metrics.Parsers.LogTail
             set
             {
                 this["dateFormat"] = value;
+            }
+        }
+
+        [ConfigurationProperty("extensions", IsRequired = false, DefaultValue = "")]
+        public string Extensions
+        {
+            get
+            {
+                return (String)this["extensions"];
+            }
+            set
+            {
+                this["extensions"] = value;
+            }
+        }
+
+        public List<string> ExtensionsList
+        {
+            get
+            {
+                return
+                    ((String)this["extensions"]).Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+            }
+            set
+            {
+                this["extensions"] = String.Join(",", value);
             }
         }
 

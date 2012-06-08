@@ -133,8 +133,7 @@ namespace Metrics.Parsers
             CollateAndSend(log, rawValues, file, lastPosition);
         }
 
-        private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues,
-            string file, long lastPosition)
+        private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues, string file, long lastPosition)
         {
             var metrics = new List<Metric>();
 
@@ -157,7 +156,20 @@ namespace Metrics.Parsers
                                                          Value = metricGroup.Count()
                                                      });
                             break;
-                        //case "avg":
+                        case "max":
+                            metrics.AddRange(from value in rawValues[stat]
+                                             group value by new { value.Timestamp, value.Key }
+                                                 into metricGroup
+                                                 select
+                                                     new Metric
+                                                     {
+                                                         Key = metricGroup.Key.Key,
+                                                         Timestamp = metricGroup.Key.Timestamp,
+                                                         Value =
+                                                             metricGroup.Max(metric => metric.Value)
+                                                     });
+                            break;
+                        case "avg":
                         default:
                             metrics.AddRange(from value in rawValues[stat]
                                              group value by new { value.Timestamp, value.Key }
@@ -189,7 +201,29 @@ namespace Metrics.Parsers
             {
                 if (matches.Count > 0)
                 {
+                    if ((stat.ExtensionsList.Count > 0) && (matches[0].Groups["url"] == null))
+                    {
+                        throw new InvalidOperationException("Stat extensions is not null, but no \"url\" is specified in the regex");
+                    }
+                    
                     var key = stat.GraphiteKey.Replace("{locationKey}", locationKey);
+
+                    //Check if there is an extensions filter
+                    var found = false;
+                    foreach (var extension in stat.ExtensionsList)
+                    {
+                        if (matches[0].Groups["url"].Value.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                        {
+                            found = true;
+                            key = key.Replace("{extension}", extension.TrimStart('.'));
+                        }
+                    }
+
+                    //If there are extension filters and they werent found, go to the next stat
+                    if ((stat.ExtensionsList.Count > 0) && (!found))
+                    {
+                        continue;
+                    }
 
                     //do key replacements
                     foreach (var map in log.Mapping.AllKeys)
