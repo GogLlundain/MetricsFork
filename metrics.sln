@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 11
+# Visual Studio 2012
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Metrics", "metrics\Metrics.csproj", "{7385BAC7-40D4-48A8-8986-0FCD7A889712}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Parsers", "parsers\Parsers.csproj", "{672A9143-110A-41E8-B64C-606574FD2B03}"
@@ -21,6 +21,10 @@ Global
 		Release|Mixed Platforms = Release|Mixed Platforms
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
+		x|Any CPU = x|Any CPU
+		x|Mixed Platforms = x|Mixed Platforms
+		x|x64 = x|x64
+		x|x86 = x|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{672A9143-110A-41E8-B64C-606574FD2B03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -35,6 +39,12 @@ Global
 		{672A9143-110A-41E8-B64C-606574FD2B03}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{672A9143-110A-41E8-B64C-606574FD2B03}.Release|x64.ActiveCfg = Release|Any CPU
 		{672A9143-110A-41E8-B64C-606574FD2B03}.Release|x86.ActiveCfg = Release|Any CPU
+		{672A9143-110A-41E8-B64C-606574FD2B03}.x|Any CPU.ActiveCfg = Release|Any CPU
+		{672A9143-110A-41E8-B64C-606574FD2B03}.x|Any CPU.Build.0 = Release|Any CPU
+		{672A9143-110A-41E8-B64C-606574FD2B03}.x|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{672A9143-110A-41E8-B64C-606574FD2B03}.x|Mixed Platforms.Build.0 = Release|Any CPU
+		{672A9143-110A-41E8-B64C-606574FD2B03}.x|x64.ActiveCfg = Release|Any CPU
+		{672A9143-110A-41E8-B64C-606574FD2B03}.x|x86.ActiveCfg = Release|Any CPU
 		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.Debug|Any CPU.ActiveCfg = Debug|x86
 		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.Debug|Mixed Platforms.ActiveCfg = Debug|x86
 		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.Debug|Mixed Platforms.Build.0 = Debug|x86
@@ -47,6 +57,12 @@ Global
 		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.Release|x64.ActiveCfg = Release|x86
 		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.Release|x86.ActiveCfg = Release|x86
 		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.Release|x86.Build.0 = Release|x86
+		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.x|Any CPU.ActiveCfg = Release|x86
+		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.x|Mixed Platforms.ActiveCfg = Release|x86
+		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.x|Mixed Platforms.Build.0 = Release|x86
+		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.x|x64.ActiveCfg = Release|x86
+		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.x|x86.ActiveCfg = Release|x86
+		{7385BAC7-40D4-48A8-8986-0FCD7A889712}.x|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
