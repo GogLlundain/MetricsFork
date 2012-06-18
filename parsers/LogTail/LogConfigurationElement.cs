@@ -105,6 +105,58 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
+        [ConfigurationProperty("boomerangBeacon", IsRequired = false)]
+        public string BoomerangBeacon
+        {
+            get
+            {
+                return (String)this["boomerangBeacon"];
+            }
+            set
+            {
+                this["boomerangBeacon"] = value;
+            }
+        }
+
+        [ConfigurationProperty("boomerangKey", IsRequired = false)]
+        public string BoomerangKey
+        {
+            get
+            {
+                return (String)this["boomerangKey"];
+            }
+            set
+            {
+                this["boomerangKey"] = value;
+            }
+        }
+
+        [ConfigurationProperty("interval", IsRequired = false)]
+        public string Interval
+        {
+            get
+            {
+                return (String)this["interval"];
+            }
+            set
+            {
+                this["interval"] = value;
+            }
+        }
+
+        [ConfigurationProperty("dateFormat", IsRequired = false, DefaultValue = "yyyy-mm-dd hh:MM:ss")]
+        public string DateFormat
+        {
+            get
+            {
+                return (String)this["dateFormat"];
+            }
+            set
+            {
+                this["dateFormat"] = value;
+            }
+        }
+
         [ConfigurationProperty("Mapping", IsRequired = true)]
         public KeyValueConfigurationCollection Mapping
         {

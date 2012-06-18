@@ -46,32 +46,6 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
-        [ConfigurationProperty("interval", IsRequired = false)]
-        public string Interval
-        {
-            get
-            {
-                return (String)this["interval"];
-            }
-            set
-            {
-                this["interval"] = value;
-            }
-        }
-
-        [ConfigurationProperty("dateFormat", IsRequired = false, DefaultValue = "yyyy-mm-dd hh:MM:ss")]
-        public string DateFormat
-        {
-            get
-            {
-                return (String)this["dateFormat"];
-            }
-            set
-            {
-                this["dateFormat"] = value;
-            }
-        }
-
         [ConfigurationProperty("extensions", IsRequired = false, DefaultValue = "")]
         public string Extensions
         {

@@ -5,7 +5,9 @@ using System.Configuration;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
+using System.Web;
 using Metrics.Parsers.LogTail;
 
 [assembly: CLSCompliant(true)]
@@ -48,6 +50,7 @@ namespace Metrics.Parsers
         private void ReadTail(string file, LogConfigurationElement log, string locationKey)
         {
             var rawValues = new ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>>();
+            var boomerangValues = new ConcurrentBag<Metric>();
 
             if (log == null)
             {
@@ -102,7 +105,7 @@ namespace Metrics.Parsers
 
                         //Update the lastPosition counter before we try parse so any failures do not repeat the same line
                         lastPosition = reader.BaseStream.Position;
-                        ParseLine(log, line, rawValues, locationKey);
+                        ParseLine(log, line, rawValues, boomerangValues, locationKey);
 
                         //Flush every 1000 lines to minimise memory footprint
                         if (lineCount >= 1000)
@@ -114,6 +117,10 @@ namespace Metrics.Parsers
                             CollateAndSend(log, rawValues, file, lastPosition);
                             rawValues.Clear();
                             lineCount = 0;
+
+                            //Send boomerang metrics
+                            graphiteClient.SendMetrics(boomerangValues);
+                            boomerangValues = new ConcurrentBag<Metric>();
                         }
                     }
 
@@ -131,6 +138,10 @@ namespace Metrics.Parsers
 
             graphiteClient.SendQuickMetric("metrics.logLines.count", rawValues.Count);
             CollateAndSend(log, rawValues, file, lastPosition);
+
+            //Send boomerang metrics
+            graphiteClient.SendMetrics(boomerangValues);
+
         }
 
         private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues, string file, long lastPosition)
@@ -192,20 +203,40 @@ namespace Metrics.Parsers
             graphiteClient.SendMetrics(metrics);
         }
 
-        private void ParseLine(LogConfigurationElement log, string line, ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues, string locationKey)
+        private void ParseLine(LogConfigurationElement log, string line, ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues, ConcurrentBag<Metric> boomerangMetrics, string locationKey)
         {
             var matches = log.CompiledRegex.Matches(line);
 
-            //Loop through all the various stats
-            foreach (LogStatConfigurationElement stat in log.Stats)
+            if (matches.Count > 0)
             {
-                if (matches.Count > 0)
+                DateTime dateTime;
+                try
+                {
+                    dateTime = DateTime.ParseExact(matches[0].Groups[log.Interval].Value,
+                                                               log.DateFormat, CultureInfo.InvariantCulture);
+                } catch (FormatException)
+                {
+                    //If we cant get the datetime then do nothing
+                    return;
+                }
+
+                //Do boomerang calculations independetly;
+                if (!String.IsNullOrWhiteSpace(log.BoomerangBeacon))
+                {
+                    if (matches[0].Groups["url"].Value == log.BoomerangBeacon)
+                    {
+                        GetBoomerangInformation(matches[0].Groups["querystring"].Value, boomerangMetrics, log.BoomerangKey, dateTime);
+                    }
+                }
+
+                //Loop through all the various stats
+                foreach (LogStatConfigurationElement stat in log.Stats)
                 {
                     if ((stat.ExtensionsList.Count > 0) && (matches[0].Groups["url"] == null))
                     {
                         throw new InvalidOperationException("Stat extensions is not null, but no \"url\" is specified in the regex");
                     }
-                    
+
                     var key = stat.GraphiteKey.Replace("{locationKey}", locationKey);
 
                     //Check if there is an extensions filter
@@ -241,9 +272,6 @@ namespace Metrics.Parsers
 
                     try
                     {
-                        var dateTime = DateTime.ParseExact(matches[0].Groups[stat.Interval].Value,
-                                                           stat.DateFormat, CultureInfo.InvariantCulture);
-
                         //Create metric
                         var metric = new Metric
                                          {
@@ -267,6 +295,86 @@ namespace Metrics.Parsers
                         graphiteClient.SendQuickMetric("metrics.runTime.avg", 1);
                     }
                 }
+            }
+        }
+
+        private void GetBoomerangInformation(string value, ConcurrentBag<Metric> metrics, string key, DateTime timestamp)
+        {
+            var queryString = HttpUtility.ParseQueryString(value);
+
+            //Try do an ip location lookup
+            if (!String.IsNullOrEmpty(queryString["user_ip"]))
+            {
+                if (queryString["user_ip"].StartsWith("10.55."))
+                {
+                    key = key.Replace("{country}", "local");
+                    key = key.Replace("{state}", "local");
+                }
+                else
+                {
+                    try
+                    {
+                        var location = Geolocation.Instance.GetLocation(IPAddress.Parse(queryString["user_ip"]));
+
+                        if (location != null && location.IpLocation != null)
+                        {
+                            key = key.Replace("{country}", String.IsNullOrWhiteSpace(location.IpLocation.Country) ? "unknown" : location.IpLocation.Country);
+                            if (String.Compare(location.IpLocation.Country, "US", StringComparison.OrdinalIgnoreCase) == 0)
+                            {
+                                key = key.Replace("{state}", String.IsNullOrWhiteSpace(location.IpLocation.State) ? "unknown" : location.IpLocation.State);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            //If we didnt get a location then mark as unknown
+            key = key.Replace("{country}", "unknown");
+            key = key.Replace("{state}", "unknown");
+
+            //Get start type
+            if (!String.IsNullOrWhiteSpace(queryString["rt.start"]))
+            {
+                key = key + "." + queryString["rt.start"];
+            }
+            else
+            {
+                key = key + ".unknown";
+            }
+
+            foreach (string queryStringKey in queryString.Keys)
+            {
+                string fullKey = key;
+                if (String.Compare(queryStringKey, "t_other", StringComparison.OrdinalIgnoreCase) == 0)
+                {
+                    var otherQueryString = HttpUtility.ParseQueryString(HttpUtility.UrlDecode(queryString[queryStringKey]).Replace("|", "=").Replace(",", "&"));
+                    foreach (string otherKey in otherQueryString)
+                    {
+                        if ((otherKey != null) && (otherKey.StartsWith("t_")))
+                        {
+                            int otherValue;
+                            if (Int32.TryParse(otherQueryString[otherKey], out otherValue))
+                            {
+                                metrics.Add(new Metric { Key = fullKey + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                                //metrics.Add(new Metric { Key = fullKey + "." + otherKey.Replace("t_", "") + ".max", Timestamp = timestamp, Value = otherValue });
+                            }
+                        }
+                    }
+
+                    continue;
+                }
+
+                if ((queryStringKey != null) && (queryStringKey.StartsWith("t_")))
+                {
+                    int otherValue;
+                    if (Int32.TryParse(queryString[queryStringKey], out otherValue))
+                    {
+                        metrics.Add(new Metric { Key = fullKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                        //metrics.Add(new Metric { Key = fullKey + "." + queryStringKey.Replace("t_", "") + ".max", Timestamp = timestamp, Value = otherValue });
+                    }
+                }
+
             }
         }
     }
