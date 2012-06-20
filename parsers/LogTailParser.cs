@@ -333,6 +333,9 @@ namespace Metrics.Parsers
             key = key.Replace("{country}", "unknown");
             key = key.Replace("{state}", "unknown");
 
+            //Add counter (before we decide where it came from to make aggregation easier
+            metrics.Add(new Metric { Key = "stats." + key + ".count", Timestamp = timestamp, Value = 1 });
+
             //Get start type
             if (!String.IsNullOrWhiteSpace(queryString["rt.start"]))
             {
@@ -345,7 +348,7 @@ namespace Metrics.Parsers
 
             foreach (string queryStringKey in queryString.Keys)
             {
-                string fullKey = key;
+                string fullKey = "timers." + key;
                 if (String.Compare(queryStringKey, "t_other", StringComparison.OrdinalIgnoreCase) == 0)
                 {
                     var otherQueryString = HttpUtility.ParseQueryString(HttpUtility.UrlDecode(queryString[queryStringKey]).Replace("|", "=").Replace(",", "&"));
