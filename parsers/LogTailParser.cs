@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Configuration;
 using System.Globalization;
 using System.IO;
@@ -8,6 +10,7 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using System.Web;
+using System.Web.Configuration;
 using Metrics.Parsers.LogTail;
 
 [assembly: CLSCompliant(true)]
@@ -214,7 +217,8 @@ namespace Metrics.Parsers
                 {
                     dateTime = DateTime.ParseExact(matches[0].Groups[log.Interval].Value,
                                                                log.DateFormat, CultureInfo.InvariantCulture);
-                } catch (FormatException)
+                }
+                catch (FormatException)
                 {
                     //If we cant get the datetime then do nothing
                     return;
@@ -223,9 +227,9 @@ namespace Metrics.Parsers
                 //Do boomerang calculations independetly;
                 if (!String.IsNullOrWhiteSpace(log.BoomerangBeacon))
                 {
-                    if (matches[0].Groups["url"].Value == log.BoomerangBeacon)
+                    if (String.Compare(matches[0].Groups["url"].Value,log.BoomerangBeacon, StringComparison.OrdinalIgnoreCase) == 0)
                     {
-                        GetBoomerangInformation(matches[0].Groups["querystring"].Value, boomerangMetrics, log.BoomerangKey, dateTime);
+                        GetBoomerangInformation(matches[0].Groups["querystring"].Value, boomerangMetrics, log.BoomerangKey, dateTime, matches[0].Groups["userAgent"].Value);
                     }
                 }
 
@@ -298,17 +302,18 @@ namespace Metrics.Parsers
             }
         }
 
-        private void GetBoomerangInformation(string value, ConcurrentBag<Metric> metrics, string key, DateTime timestamp)
+        private void GetBoomerangInformation(string value, ConcurrentBag<Metric> metrics, string key, DateTime timestamp, string userAgent)
         {
             var queryString = HttpUtility.ParseQueryString(value);
 
             //Try do an ip location lookup
+            string locationKey = "{country}.{state}";
             if (!String.IsNullOrEmpty(queryString["user_ip"]))
             {
                 if (queryString["user_ip"].StartsWith("10.55."))
                 {
-                    key = key.Replace("{country}", "local");
-                    key = key.Replace("{state}", "local");
+                    locationKey = locationKey.Replace("{country}", "local");
+                    locationKey = locationKey.Replace("{state}", "local");
                 }
                 else
                 {
@@ -318,10 +323,10 @@ namespace Metrics.Parsers
 
                         if (location != null && location.IpLocation != null)
                         {
-                            key = key.Replace("{country}", String.IsNullOrWhiteSpace(location.IpLocation.Country) ? "unknown" : location.IpLocation.Country);
+                            locationKey = locationKey.Replace("{country}", String.IsNullOrWhiteSpace(location.IpLocation.Country) ? "unknown" : location.IpLocation.Country);
                             if (String.Compare(location.IpLocation.Country, "US", StringComparison.OrdinalIgnoreCase) == 0)
                             {
-                                key = key.Replace("{state}", String.IsNullOrWhiteSpace(location.IpLocation.State) ? "unknown" : location.IpLocation.State);
+                                locationKey = locationKey.Replace("{state}", String.IsNullOrWhiteSpace(location.IpLocation.State) ? "unknown" : location.IpLocation.State);
                             }
                         }
                     }
@@ -330,20 +335,80 @@ namespace Metrics.Parsers
             }
 
             //If we didnt get a location then mark as unknown
-            key = key.Replace("{country}", "unknown");
-            key = key.Replace("{state}", "unknown");
+            locationKey = locationKey.Replace("{country}", "unknown");
+            locationKey = locationKey.Replace("{state}", "unknown");
 
-            //Add counter (before we decide where it came from to make aggregation easier
-            metrics.Add(new Metric { Key = "stats." + key + ".count", Timestamp = timestamp, Value = 1 });
-
-            //Get start type
-            if (!String.IsNullOrWhiteSpace(queryString["rt.start"]))
+            //Try get the browser bersion
+            string browserVersion = "unknown.unknown";
+            try
             {
-                key = key + "." + queryString["rt.start"];
+                var browser = new HttpBrowserCapabilities
+                {
+                    Capabilities = new Hashtable { { string.Empty, userAgent } }
+                };
+                var factory = new BrowserCapabilitiesFactory();
+                factory.ConfigureBrowserCapabilities(new NameValueCollection(), browser);
+
+                if (String.Compare(browser.Browser, "mozilla", StringComparison.OrdinalIgnoreCase) == 0)
+                {
+                    if (userAgent.ToLowerInvariant().Contains("msie+10.0"))
+                    {
+                        browserVersion = "msie.10";
+                    }
+                    else if (userAgent.ToLowerInvariant().Contains("msie+9.0"))
+                    {
+                        browserVersion = "msie.9";
+                    }
+                    else if (userAgent.ToLowerInvariant().Contains("msie+8.0"))
+                    {
+                        browserVersion = "msie.8";
+                    }
+                    else if (userAgent.ToLowerInvariant().Contains("msie+7.0"))
+                    {
+                        browserVersion = "msie.7";
+                    }
+                    else if (userAgent.ToLowerInvariant().Contains("msie+6.0"))
+                    {
+                        browserVersion = "msie.6";
+                    }
+                    else if (userAgent.ToLowerInvariant().Contains("msie"))
+                    {
+                        browserVersion = "msie.unknown";
+                    }
+                }
+                else
+                {
+                    browserVersion = browser.Browser.ToLowerInvariant() + "." + browser.MajorVersion;
+                }
+            }
+            catch { }
+
+            //Add counter for location
+            var existing = metrics.Where(metric => metric.Key == "stats." + key + ".location." + locationKey + ".count" && metric.Timestamp == timestamp).FirstOrDefault();
+            if (existing == null)
+            {
+                metrics.Add(new Metric { Key = "stats." + key + ".location." + locationKey + ".count", Timestamp = timestamp, Value = 1 });
             }
             else
             {
-                key = key + ".unknown";
+                existing.Value++;
+            }
+            //Counter with browser
+            existing = metrics.Where(metric => metric.Key == "stats." + key + ".browser." + browserVersion + ".count" && metric.Timestamp == timestamp).FirstOrDefault();
+            if (existing == null)
+            {
+                metrics.Add(new Metric { Key = "stats." + key + ".browser." + browserVersion + ".count", Timestamp = timestamp, Value = 1 });
+            }
+            else
+            {
+                existing.Value++;
+            }
+
+            //Get start type
+            string startKey = "unknown";
+            if (!String.IsNullOrWhiteSpace(queryString["rt.start"]))
+            {
+                startKey = queryString["rt.start"];
             }
 
             foreach (string queryStringKey in queryString.Keys)
@@ -359,8 +424,14 @@ namespace Metrics.Parsers
                             int otherValue;
                             if (Int32.TryParse(otherQueryString[otherKey], out otherValue))
                             {
-                                metrics.Add(new Metric { Key = fullKey + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
-                                //metrics.Add(new Metric { Key = fullKey + "." + otherKey.Replace("t_", "") + ".max", Timestamp = timestamp, Value = otherValue });
+                                //Timer by location
+                                metrics.Add(new Metric { Key = fullKey + ".location." + locationKey + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                                //Timer by location & start type
+                                metrics.Add(new Metric { Key = fullKey + ".location." + locationKey + "." + startKey + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                                //Timer by browser
+                                metrics.Add(new Metric { Key = fullKey + ".browser." + browserVersion + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                                //Timer by browser & start type
+                                metrics.Add(new Metric { Key = fullKey + ".browser." + browserVersion + "." + startKey + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
                             }
                         }
                     }
@@ -373,8 +444,14 @@ namespace Metrics.Parsers
                     int otherValue;
                     if (Int32.TryParse(queryString[queryStringKey], out otherValue))
                     {
-                        metrics.Add(new Metric { Key = fullKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
-                        //metrics.Add(new Metric { Key = fullKey + "." + queryStringKey.Replace("t_", "") + ".max", Timestamp = timestamp, Value = otherValue });
+                        //Timer by location
+                        metrics.Add(new Metric { Key = fullKey + ".location." + locationKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                        //Timer by location & start type
+                        metrics.Add(new Metric { Key = fullKey + ".location." + locationKey + "." + startKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                        //Timer by browser
+                        metrics.Add(new Metric { Key = fullKey + ".browser." + browserVersion + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                        //Timer by browser & start type
+                        metrics.Add(new Metric { Key = fullKey + ".browser." + browserVersion + "." + startKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
                     }
                 }
 
