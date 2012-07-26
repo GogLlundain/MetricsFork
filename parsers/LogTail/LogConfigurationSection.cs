@@ -15,5 +15,18 @@ namespace Metrics.Parsers.LogTail
         {
             get { return (LogConfigurationCollection)this["Logs"]; }
         }
+
+        [ConfigurationProperty("tenSecondGroup", IsRequired = false, DefaultValue = true)]
+        public bool TenSecondGroup
+        {
+            get
+            {
+                return (bool)this["tenSecondGroup"];
+            }
+            set
+            {
+                this["tenSecondGroup"] = value;
+            }
+        }
     }
 }

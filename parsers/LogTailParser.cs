@@ -21,6 +21,7 @@ namespace Metrics.Parsers
         private readonly LogConfigurationCollection logs;
         private readonly OffsetCursor<long> cursor;
         private GraphiteClient graphiteClient;
+        private bool tenSecondGroup;
 
         public LogTailParser()
         {
@@ -29,6 +30,7 @@ namespace Metrics.Parsers
             if (section != null)
             {
                 logs = section.Logs;
+                tenSecondGroup = section.TenSecondGroup;
             }
         }
 
@@ -217,6 +219,11 @@ namespace Metrics.Parsers
                 {
                     dateTime = DateTime.ParseExact(matches[0].Groups[log.Interval].Value,
                                                                log.DateFormat, CultureInfo.InvariantCulture);
+                    //Strip the last second 
+                    if (tenSecondGroup)
+                    {
+                        dateTime = dateTime.AddSeconds((dateTime.Second % 10) * -1);
+                    }
                 }
                 catch (FormatException)
                 {
