@@ -23,14 +23,15 @@ namespace Metrics.Parsers
             }
 
             filesUsed = new ConcurrentBag<string>();
-            this.prefix = prefix + "_";
+            this.prefix = prefix;
         }
 
         public void StoreLastRead(string uniqueName, T offset)
         {
+            CheckDirectory();
             using (var md5 = MD5.Create())
             {
-                var tempName = prefix + GetMD5HashFileName(md5, uniqueName);
+                var tempName = "offset" + Path.DirectorySeparatorChar + prefix + Path.DirectorySeparatorChar + prefix + "-" + GetMD5HashFileName(md5, uniqueName);
 
                 //if its a string value we don't write the helper name in the file
                 if (offset is String)
@@ -59,9 +60,10 @@ namespace Metrics.Parsers
         {
             try
             {
+                CheckDirectory();
                 using (var md5 = MD5.Create())
                 {
-                    string tempName = prefix + GetMD5HashFileName(md5, uniqueName);
+                    string tempName = "offset" + Path.DirectorySeparatorChar + prefix + Path.DirectorySeparatorChar + prefix + "-" + GetMD5HashFileName(md5, uniqueName);
 
                     if (!File.Exists(tempName))
                     {
@@ -100,6 +102,14 @@ namespace Metrics.Parsers
         public IEnumerable<string> GetUsedOffsetFiles()
         {
             return filesUsed.Distinct().ToArray();
+        }
+
+        public void CheckDirectory()
+        {
+            if (!Directory.Exists("offset" + Path.DirectorySeparatorChar + prefix))
+            {
+                Directory.CreateDirectory("offset" + Path.DirectorySeparatorChar + prefix);
+            }
         }
 
         /// <summary>
