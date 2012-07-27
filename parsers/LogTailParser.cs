@@ -117,12 +117,9 @@ namespace Metrics.Parsers
                             graphiteClient.SendQuickMetric("metrics.logLines.count", (int)lineCount);
 
                             //send real metrics to graphite
-                            CollateAndSend(log, rawValues, file, lastPosition);
+                            CollateAndSend(log, rawValues, file, lastPosition, boomerangValues);
                             rawValues.Clear();
                             lineCount = 0;
-
-                            //Send boomerang metrics
-                            graphiteClient.SendMetrics(boomerangValues);
                             boomerangValues = new ConcurrentBag<Metric>();
                         }
                     }
@@ -140,15 +137,11 @@ namespace Metrics.Parsers
             }
 
             graphiteClient.SendQuickMetric("metrics.logLines.count", rawValues.Count);
-            CollateAndSend(log, rawValues, file, lastPosition);
-
-            //Send boomerang metrics
-            graphiteClient.SendMetrics(boomerangValues);
-
+            CollateAndSend(log, rawValues, file, lastPosition, boomerangValues);
         }
 
-        private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement, 
-            ConcurrentBag<Metric>> rawValues, string file, long lastPosition)
+        private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement,
+            ConcurrentBag<Metric>> rawValues, string file, long lastPosition, IEnumerable<Metric> boomerangValues)
         {
             var metrics = new List<Metric>();
 
@@ -230,10 +223,24 @@ namespace Metrics.Parsers
                                                      Value = metricGroup.Count() / 10
                                                  });
 
-                        
+
                     }
                 }
             }
+
+            //Aggregate the boomerang metrics
+            metrics.AddRange(from value in boomerangValues
+                             group value by new { value.Timestamp, value.Key }
+                                 into metricGroup
+                                 select
+                                     new Metric
+                                     {
+                                         Key = metricGroup.Key.Key,
+                                         Timestamp = metricGroup.Key.Timestamp,
+                                         Value =
+                                             metricGroup.Sum(metric => metric.Value) /
+                                             metricGroup.Count()
+                                     });
 
             cursor.StoreLastRead(file, lastPosition);
             graphiteClient.SendMetrics(metrics);
