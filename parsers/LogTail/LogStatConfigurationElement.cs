@@ -33,6 +33,20 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
+        [ConfigurationProperty("calculatePerSecond", IsRequired = false, DefaultValue = false)]
+        public bool CalculatePerSecond
+        {
+            get
+            {
+                return (bool)this["calculatePerSecond"];
+            }
+            set
+            {
+                this["calculatePerSecond"] = value;
+            }
+        }
+
+
         [ConfigurationProperty("value", IsRequired = false, DefaultValue = null)]
         public string Value
         {

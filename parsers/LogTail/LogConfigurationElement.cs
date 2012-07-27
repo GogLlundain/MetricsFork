@@ -157,6 +157,19 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
+        [ConfigurationProperty("tenSecondGroup", IsRequired = false, DefaultValue = true)]
+        public bool TenSecondGroup
+        {
+            get
+            {
+                return (bool)this["tenSecondGroup"];
+            }
+            set
+            {
+                this["tenSecondGroup"] = value;
+            }
+        }
+
         [ConfigurationProperty("Mapping", IsRequired = true)]
         public KeyValueConfigurationCollection Mapping
         {

@@ -21,7 +21,6 @@ namespace Metrics.Parsers
         private readonly LogConfigurationCollection logs;
         private readonly OffsetCursor<long> cursor;
         private GraphiteClient graphiteClient;
-        private bool tenSecondGroup;
 
         public LogTailParser()
         {
@@ -30,7 +29,6 @@ namespace Metrics.Parsers
             if (section != null)
             {
                 logs = section.Logs;
-                tenSecondGroup = section.TenSecondGroup;
             }
         }
 
@@ -149,7 +147,8 @@ namespace Metrics.Parsers
 
         }
 
-        private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>> rawValues, string file, long lastPosition)
+        private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement, 
+            ConcurrentBag<Metric>> rawValues, string file, long lastPosition)
         {
             var metrics = new List<Metric>();
 
@@ -158,6 +157,8 @@ namespace Metrics.Parsers
             {
                 if (rawValues.ContainsKey(stat))
                 {
+
+                    //Aggregate main value
                     switch (stat.AggregateType)
                     {
                         case "count":
@@ -185,6 +186,19 @@ namespace Metrics.Parsers
                                                              metricGroup.Max(metric => metric.Value)
                                                      });
                             break;
+                        case "min":
+                            metrics.AddRange(from value in rawValues[stat]
+                                             group value by new { value.Timestamp, value.Key }
+                                                 into metricGroup
+                                                 select
+                                                     new Metric
+                                                     {
+                                                         Key = metricGroup.Key.Key,
+                                                         Timestamp = metricGroup.Key.Timestamp,
+                                                         Value =
+                                                             metricGroup.Min(metric => metric.Value)
+                                                     });
+                            break;
                         case "avg":
                         default:
                             metrics.AddRange(from value in rawValues[stat]
@@ -200,6 +214,23 @@ namespace Metrics.Parsers
                                                              metricGroup.Count()
                                                      });
                             break;
+                    }
+
+                    //Add per second calulcation if required
+                    if ((stat.CalculatePerSecond) && (log.TenSecondGroup))
+                    {
+                        metrics.AddRange(from value in rawValues[stat]
+                                         group value by new { value.Timestamp, value.Key }
+                                             into metricGroup
+                                             select
+                                                 new Metric
+                                                 {
+                                                     Key = metricGroup.Key.Key + "PerSecond",
+                                                     Timestamp = metricGroup.Key.Timestamp,
+                                                     Value = metricGroup.Count() / 10
+                                                 });
+
+                        
                     }
                 }
             }
@@ -220,7 +251,7 @@ namespace Metrics.Parsers
                     dateTime = DateTime.ParseExact(matches[0].Groups[log.Interval].Value,
                                                                log.DateFormat, CultureInfo.InvariantCulture);
                     //Strip the last second 
-                    if (tenSecondGroup)
+                    if (log.TenSecondGroup)
                     {
                         dateTime = dateTime.AddSeconds((dateTime.Second % 10) * -1);
                     }
@@ -234,7 +265,7 @@ namespace Metrics.Parsers
                 //Do boomerang calculations independetly;
                 if (!String.IsNullOrWhiteSpace(log.BoomerangBeacon))
                 {
-                    if (String.Compare(matches[0].Groups["url"].Value,log.BoomerangBeacon, StringComparison.OrdinalIgnoreCase) == 0)
+                    if (String.Compare(matches[0].Groups["url"].Value, log.BoomerangBeacon, StringComparison.OrdinalIgnoreCase) == 0)
                     {
                         GetBoomerangInformation(matches[0].Groups["querystring"].Value, boomerangMetrics, log.BoomerangKey, dateTime, matches[0].Groups["userAgent"].Value);
                     }
