@@ -87,7 +87,7 @@ namespace Metrics.Parsers.LogTail
         }
 
         [ConfigurationProperty("graphiteKey", IsRequired = true, IsKey = true, DefaultValue = "site")]
-        [StringValidator(InvalidCharacters = "~!@#$%^&*()[]/;'\"|\\ ", MinLength = 3, MaxLength = 50)]
+        [StringValidator(InvalidCharacters = "~!@#$%^&*()[]/;'\"|\\ ", MinLength = 3, MaxLength = 100)]
         public string GraphiteKey
         {
             get
