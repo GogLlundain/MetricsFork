@@ -93,8 +93,8 @@ namespace Metrics.Parsers
             //Work out the last read position
             var info = new FileInfo(file);
 
-            //Skip if only today is set and file wasn't updated today
-            if ((log.OnlyToday) && (info.LastWriteTime.Date < DateTime.Now.Date))
+            //Skip if log file older than today - # days
+            if (info.LastWriteTime.Date < DateTime.Now.Date.AddDays((log.MaxDaysToProcess + 1) * -1))
             {
                 return;
             }
@@ -293,6 +293,12 @@ namespace Metrics.Parsers
                 catch (FormatException)
                 {
                     //If we cant get the datetime then do nothing
+                    return;
+                }
+
+                //Check if its inside the acceptable range
+                if (dateTime < DateTime.Now.AddDays(log.MaxDaysToProcess * -1))
+                {
                     return;
                 }
 

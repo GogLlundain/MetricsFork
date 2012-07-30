@@ -79,16 +79,16 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
-        [ConfigurationProperty("onlyToday", IsRequired = false, DefaultValue = true)]
-        public bool OnlyToday
+        [ConfigurationProperty("maxDaysToProcess", IsRequired = false, DefaultValue = 7)]
+        public int MaxDaysToProcess
         {
             get
             {
-                return (bool)this["onlyToday"];
+                return (int)this["maxDaysToProcess"];
             }
             set
             {
-                this["onlyToday"] = value;
+                this["maxDaysToProcess"] = value;
             }
         }
 
