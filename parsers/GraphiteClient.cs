@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Graphite;
 
 namespace Metrics.Parsers
@@ -22,11 +23,15 @@ namespace Metrics.Parsers
         /// </summary>
         public void SendMetrics(IEnumerable<Metric> metrics)
         {
-            using (var graphiteClient = new GraphiteTcpClient(host, port, prefix))
+            //Make sure there are metrics to send before we waste a connection
+            if ((metrics != null) && (metrics.Count() > 0))
             {
-                foreach (var metric in metrics)
+                using (var graphiteClient = new GraphiteTcpClient(host, port, prefix))
                 {
-                    graphiteClient.Send(metric.Key, metric.Value, metric.Timestamp);
+                    foreach (var metric in metrics)
+                    {
+                        graphiteClient.Send(metric.Key, metric.Value, metric.Timestamp);
+                    }
                 }
             }
         }
