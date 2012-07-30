@@ -8,6 +8,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Configuration;
@@ -21,11 +22,13 @@ namespace Metrics.Parsers
         private readonly LogConfigurationCollection logs;
         private readonly OffsetCursor<long> cursor;
         private GraphiteClient graphiteClient;
+        private bool showFeedback;
 
-        public LogTailParser()
+        public LogTailParser(bool feedback = false)
         {
             var section = ConfigurationManager.GetSection("LogTail") as LogConfigurationSection;
             cursor = new OffsetCursor<long>("log");
+            showFeedback = feedback;
             if (section != null)
             {
                 logs = section.Logs;
@@ -36,6 +39,23 @@ namespace Metrics.Parsers
         {
             graphiteClient = client;
 
+            int total = 0;
+            //Calculate total if required
+            if (showFeedback)
+            {
+                foreach (var log in logs)
+                {
+                    foreach (var locationKey in log.Locations.AllKeys)
+                    {
+                        foreach (var file in Directory.GetFiles(log.Locations[locationKey].Value, log.Pattern))
+                        {
+                            total++;
+                        }
+                    }
+                }
+            }
+
+            int count = 0;
             Parallel.ForEach(logs, log =>
                                        {
                                            foreach (var locationKey in log.Locations.AllKeys)
@@ -43,6 +63,13 @@ namespace Metrics.Parsers
                                                foreach (var file in Directory.GetFiles(log.Locations[locationKey].Value, log.Pattern))
                                                {
                                                    ReadTail(file, log, locationKey);
+
+                                                   //Show feedback if required
+                                                   if (showFeedback)
+                                                   {
+                                                       Interlocked.Increment(ref count);
+                                                       Console.WriteLine("Finished {0}/{1} files", count, total);
+                                                   }
                                                }
                                            }
                                        });

@@ -3,26 +3,28 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Metrics.Parsers;
 
 namespace Metrics
 {
     class Program
     {
-        static void Main()
+        static void Main(string[] args)
         {
             var client = new GraphiteClient(ConfigurationManager.AppSettings["GraphiteHost"],
                                             Int32.Parse(ConfigurationManager.AppSettings["GraphitePort"]),
                                             ConfigurationManager.AppSettings["GraphiteKeyPrefix"]);
 
             var filesUsed = new List<string>();
+            bool feedback = ((args != null)  && (args.Contains("--show-progress")));
 
             //Debug information
             var sw = new Stopwatch();
             sw.Start();
 
             //Configuration based.  Config file lists logs, sizes, regex, etc
-            var logParser = new LogTailParser();
+            var logParser = new LogTailParser(feedback);
             filesUsed.AddRange(logParser.GetMetrics(client));
 
             //WPT parsers
