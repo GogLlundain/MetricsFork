@@ -43,6 +43,7 @@ namespace Metrics.Parsers
             //Calculate total if required
             if (showFeedback)
             {
+                Console.WriteLine("Calculating total...");
                 foreach (var log in logs)
                 {
                     foreach (var locationKey in log.Locations.AllKeys)
@@ -53,6 +54,7 @@ namespace Metrics.Parsers
                         }
                     }
                 }
+                Console.WriteLine("DONE : Calculating total");
             }
 
             int count = 0;
@@ -62,29 +64,42 @@ namespace Metrics.Parsers
                                            {
                                                foreach (var file in Directory.GetFiles(log.Locations[locationKey].Value, log.Pattern))
                                                {
-                                                   ReadTail(file, log, locationKey);
+                                                   var readNewLines = ReadTail(file, log, locationKey);
 
                                                    //Show feedback if required
                                                    if (showFeedback)
                                                    {
                                                        Interlocked.Increment(ref count);
-                                                       Console.WriteLine("Finished {0}/{1} files", count, total);
+                                                       Console.WriteLine("{4} {0}/{1} files [{2} - {3}]", count, total, log.Name, locationKey, readNewLines.HasValue ? (readNewLines.Value ? "Finished" : "Not Changed") : "Skipped");
                                                    }
                                                }
+
+                                               //Show feedback if required
+                                               if (showFeedback)
+                                               {
+                                                   Console.WriteLine("DONE LOCATION: {0} - {1}", log.Name, locationKey);
+                                               }
                                            }
+
+                                           //Show feedback if required
+                                           if (showFeedback)
+                                           {
+                                               Console.WriteLine("DONE ALL: {0}", log.Name);
+                                           }
+
                                        });
 
             return cursor.GetUsedOffsetFiles();
         }
 
-        private void ReadTail(string file, LogConfigurationElement log, string locationKey)
+        private bool? ReadTail(string file, LogConfigurationElement log, string locationKey)
         {
             var rawValues = new ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>>();
             var boomerangValues = new ConcurrentBag<Metric>();
 
             if (log == null)
             {
-                return;
+                return null;
             }
 
             //If multiple log parsers use the same file, select the maximum size (including infinite)
@@ -96,7 +111,7 @@ namespace Metrics.Parsers
             //Skip if log file older than today - # days
             if (info.LastWriteTime.Date < DateTime.Now.Date.AddDays((log.MaxDaysToProcess + 1) * -1))
             {
-                return;
+                return null;
             }
 
             var offset = cursor.GetLastRead(file);
@@ -105,7 +120,7 @@ namespace Metrics.Parsers
             //If file hasnt changed, don't bother opening
             if (info.Length <= offset)
             {
-                return;
+                return false;
             }
 
             //If the file is greater than our maxTailMB setting, skip to the maximum and proceed
@@ -165,6 +180,8 @@ namespace Metrics.Parsers
 
             graphiteClient.SendQuickMetric("metrics.logLines.count", rawValues.Count);
             CollateAndSend(log, rawValues, file, lastPosition, boomerangValues);
+
+            return true;
         }
 
         private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement,
