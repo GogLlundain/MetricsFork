@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Metrics.Parsers;
+using Parsers.Logging;
 
 namespace Metrics
 {
@@ -17,14 +18,18 @@ namespace Metrics
                                             ConfigurationManager.AppSettings["GraphiteKeyPrefix"]);
 
             var filesUsed = new List<string>();
-            bool feedback = ((args != null)  && (args.Contains("--show-progress")));
+            bool feedback = ((args != null) && (args.Contains("--show-progress")));
 
             //Debug information
             var sw = new Stopwatch();
             sw.Start();
 
             //Configuration based.  Config file lists logs, sizes, regex, etc
-            var logParser = new LogTailParser(feedback);
+            var logParser = new LogTailParser();
+            if (feedback)
+            {
+                logParser.MessageReporter = new ConsoleLogger();
+            }
             filesUsed.AddRange(logParser.GetMetrics(client));
 
             //WPT parsers
@@ -43,7 +48,5 @@ namespace Metrics
                 }
             }
         }
-
-
     }
 }

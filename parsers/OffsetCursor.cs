@@ -26,12 +26,14 @@ namespace Metrics.Parsers
             this.prefix = prefix;
         }
 
-        public void StoreLastRead(string uniqueName, T offset)
+        public void StoreLastRead(string logName, string uniqueName, T offset)
         {
-            CheckDirectory();
             using (var md5 = MD5.Create())
             {
-                var tempName = "offset" + Path.DirectorySeparatorChar + prefix + Path.DirectorySeparatorChar + prefix + "-" + GetMD5HashFileName(md5, uniqueName);
+                string offsetFileDirectory = String.Format("offset{0}{1}{0}{2}{0}", Path.DirectorySeparatorChar, prefix, logName);
+                CheckDirectory(offsetFileDirectory);
+                string tempName = offsetFileDirectory + GetMD5HashFileName(md5, uniqueName);
+                //var tempName = "offset" + Path.DirectorySeparatorChar + prefix + Path.DirectorySeparatorChar + prefix + "-" + GetMD5HashFileName(md5, uniqueName);
 
                 //if its a string value we don't write the helper name in the file
                 if (offset is String)
@@ -56,17 +58,25 @@ namespace Metrics.Parsers
             return Convert.ToString(offset, CultureInfo.InvariantCulture);
         }
 
-        public T GetLastRead(string uniqueName)
+        public T GetLastRead(string logName, string uniqueName)
         {
             try
             {
-                CheckDirectory();
                 using (var md5 = MD5.Create())
                 {
-                    string tempName = "offset" + Path.DirectorySeparatorChar + prefix + Path.DirectorySeparatorChar + prefix + "-" + GetMD5HashFileName(md5, uniqueName);
+                    string offsetFileDirectory = String.Format("offset{0}{1}{0}{2}{0}", Path.DirectorySeparatorChar, prefix, logName);
+                    CheckDirectory(offsetFileDirectory);
+                    string tempName = offsetFileDirectory + GetMD5HashFileName(md5, uniqueName);
 
                     if (!File.Exists(tempName))
                     {
+                        //Backwards compatibility with old naming
+                        tempName = "offset" + Path.DirectorySeparatorChar + prefix + Path.DirectorySeparatorChar + prefix + "-" + GetMD5HashFileName(md5, uniqueName);
+                    }
+
+                    if (!File.Exists(tempName))
+                    {
+
                         return default(T);
                     }
 
@@ -104,11 +114,11 @@ namespace Metrics.Parsers
             return filesUsed.Distinct().ToArray();
         }
 
-        public void CheckDirectory()
+        public void CheckDirectory(string directory)
         {
-            if (!Directory.Exists("offset" + Path.DirectorySeparatorChar + prefix))
+            if (!Directory.Exists(directory))
             {
-                Directory.CreateDirectory("offset" + Path.DirectorySeparatorChar + prefix);
+                Directory.CreateDirectory(directory);
             }
         }
 

@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using System.Web;
 using System.Web.Configuration;
 using Metrics.Parsers.LogTail;
+using Parsers.Logging;
 
 [assembly: CLSCompliant(true)]
 namespace Metrics.Parsers
@@ -23,71 +24,81 @@ namespace Metrics.Parsers
         private readonly LogConfigurationCollection logs;
         private readonly OffsetCursor<long> cursor;
         private GraphiteClient graphiteClient;
-        private bool showFeedback;
 
-        public LogTailParser(bool feedback = false)
+        public IMetricsLogger MessageReporter = new NullLogger();
+
+        public LogTailParser()
         {
             var section = ConfigurationManager.GetSection("LogTail") as LogConfigurationSection;
             cursor = new OffsetCursor<long>("log");
-            showFeedback = feedback;
             if (section != null)
             {
                 logs = section.Logs;
             }
         }
 
+        private string[] GetValidLogfilesFromDirectory(string logFileLocation, string logFilePattern, int maxDaysToProcess)
+        {
+            DirectoryInfo di = new DirectoryInfo(logFileLocation);
+            if (di.Exists)
+            {
+                FileSystemInfo[] files = di.GetFileSystemInfos(logFilePattern);
+                return (from file in files
+                        where file.LastWriteTime.Date > DateTime.Now.Date.AddDays(0 - (maxDaysToProcess + 1))
+                        orderby file.LastWriteTime descending
+                        select file.FullName).ToArray();
+            }
+
+            throw new DirectoryNotFoundException("Log path does not exist : " + logFileLocation);
+        }
+
+        private int CalculateTotalFilesToProcess()
+        {
+            int total = 0;
+            foreach (var log in logs)
+            {
+                foreach (var locationKey in log.Locations.AllKeys)
+                {
+                    foreach (var file in GetValidLogfilesFromDirectory(log.Locations[locationKey].Value, log.Pattern, log.MaxDaysToProcess))
+                    {
+                        total++;
+                    }
+                }
+            }
+
+            return total;
+        }
+
         public IEnumerable<string> GetMetrics(GraphiteClient client)
         {
             graphiteClient = client;
 
-            int total = 0;
-            //Calculate total if required
-            if (showFeedback)
-            {
-                Console.WriteLine("Calculating total...");
-                foreach (var log in logs)
-                {
-                    foreach (var locationKey in log.Locations.AllKeys)
-                    {
-                        foreach (var file in Directory.GetFiles(log.Locations[locationKey].Value, log.Pattern))
-                        {
-                            total++;
-                        }
-                    }
-                }
-                Console.WriteLine("DONE : Calculating total");
-            }
+            MessageReporter.ReportProgress("Calculating total...");
+            int totalFilesToProcess = CalculateTotalFilesToProcess();
+            MessageReporter.ReportProgress("DONE : Calculating total");
 
             int count = 0;
             Parallel.ForEach(logs, log =>
                                        {
+                                           string workerId = log.Name;
+                                           MessageReporter.ReportWorkerStatus(workerId, String.Format("[{0}] Warming up", log.Name));
                                            foreach (var locationKey in log.Locations.AllKeys)
                                            {
-                                               foreach (var file in Directory.GetFiles(log.Locations[locationKey].Value, log.Pattern))
+                                               foreach (var file in GetValidLogfilesFromDirectory(log.Locations[locationKey].Value, log.Pattern, log.MaxDaysToProcess))
                                                {
+                                                   MessageReporter.ReportWorkerStatus(workerId, String.Format("[{0}] Processing file {1} ", locationKey, file.Substring(file.LastIndexOf("\\") + 1)));
                                                    var readNewLines = ReadTail(file, log, locationKey);
 
-                                                   //Show feedback if required
-                                                   if (showFeedback)
-                                                   {
-                                                       Interlocked.Increment(ref count);
-                                                       Console.WriteLine("{4} {0}/{1} files [{2} - {3}]", count, total, log.Name, locationKey, readNewLines.HasValue ? (readNewLines.Value ? "Finished" : "Not Changed") : "Skipped");
-                                                   }
+                                                   Interlocked.Increment(ref count);
+                                                   MessageReporter.SetHeadline(String.Format("Processed {0}/{1} ({2:P}) files", count, totalFilesToProcess, (double)count / (double)totalFilesToProcess));
+
+                                                   MessageReporter.ReportWorkerStatus(workerId, String.Format("[{0}] {1} files ", locationKey, readNewLines.HasValue ? (readNewLines.Value ? "Finished" : "Not Changed") : "Skipped"));
                                                }
 
-                                               //Show feedback if required
-                                               if (showFeedback)
-                                               {
-                                                   Console.WriteLine("DONE LOCATION: {0} - {1}", log.Name, locationKey);
-                                               }
+                                               MessageReporter.ReportWorkerStatus(workerId, String.Format("[{0}] DONE LOCATION", locationKey));
                                            }
 
-                                           //Show feedback if required
-                                           if (showFeedback)
-                                           {
-                                               Console.WriteLine("DONE ALL: {0}", log.Name);
-                                           }
-
+                                           MessageReporter.ReportWorkerStatus(workerId, String.Format("DONE ALL"));
                                        });
 
             return cursor.GetUsedOffsetFiles();
@@ -108,14 +119,8 @@ namespace Metrics.Parsers
 
             //Work out the last read position
             var info = new FileInfo(file);
+            var offset = cursor.GetLastRead(log.Name, file);
 
-            //Skip if log file older than today - # days
-            if (info.LastWriteTime.Date < DateTime.Now.Date.AddDays((log.MaxDaysToProcess + 1) * -1))
-            {
-                return null;
-            }
-
-            var offset = cursor.GetLastRead(file);
             long lastPosition = offset;
 
             //If file hasnt changed, don't bother opening
@@ -287,7 +292,7 @@ namespace Metrics.Parsers
                                              metricGroup.Count()
                                      });
 
-            cursor.StoreLastRead(file, lastPosition);
+            cursor.StoreLastRead(log.Name, file, lastPosition);
             graphiteClient.SendMetrics(metrics);
         }
 

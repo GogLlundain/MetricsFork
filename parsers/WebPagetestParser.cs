@@ -287,6 +287,7 @@ namespace Metrics.Parsers
             return dt;
         }
 
+        private string logName = "WebPageTest";
         public IEnumerable<string> GetMetrics(GraphiteClient client)
         {
             //Load the domain parser rule set
@@ -299,7 +300,7 @@ namespace Metrics.Parsers
 
             foreach (var site in siteSection.Sites.OfType<SiteConfigurationElement>())
             {
-                string lastRead = cursor.GetLastRead(site.GraphiteKey);
+                string lastRead = cursor.GetLastRead(logName, site.GraphiteKey);
                 Parallel.ForEach(GetResultUrls(site.Url, lastRead), resultUrl =>
                     {
                         if (!String.IsNullOrWhiteSpace(resultUrl))
@@ -313,7 +314,7 @@ namespace Metrics.Parsers
                                     lock (cursor)
                                     {
                                         lastRead += Environment.NewLine + resultUrl;
-                                        cursor.StoreLastRead(site.GraphiteKey, lastRead);
+                                        cursor.StoreLastRead(logName, site.GraphiteKey, lastRead);
                                     }
                                 }
                             }
@@ -322,7 +323,7 @@ namespace Metrics.Parsers
                                 lock (cursor)
                                 {
                                     lastRead += Environment.NewLine + resultUrl + Environment.NewLine + "failed:" + resultUrl;
-                                    cursor.StoreLastRead(site.GraphiteKey, lastRead);
+                                    cursor.StoreLastRead(logName, site.GraphiteKey, lastRead);
                                 }
                             }
                         }
