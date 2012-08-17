@@ -176,6 +176,12 @@ namespace Metrics.Parsers.LogTail
             get { return (KeyValueConfigurationCollection)this["Mapping"]; }
         }
 
+        [ConfigurationProperty("BoomerangUrls", IsRequired = false)]
+        public KeyValueConfigurationCollection BoomerangUrls
+        {
+            get { return (KeyValueConfigurationCollection)this["BoomerangUrls"]; }
+        }
+
         [ConfigurationProperty("Locations", IsRequired = true)]
         public KeyValueConfigurationCollection Locations
         {
