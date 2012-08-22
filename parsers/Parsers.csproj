@@ -63,8 +63,10 @@
     <Compile Include="GraphiteClient.cs" />
     <Compile Include="Location.cs" />
     <Compile Include="Logging\ConsoleLogger.cs" />
+    <Compile Include="Logging\RawConsoleLogger.cs" />
     <Compile Include="Logging\IMetricsLogger.cs" />
     <Compile Include="Logging\NullLogger.cs" />
+    <Compile Include="LogTail\Log.cs" />
     <Compile Include="LogTail\LogStatConfigurationCollection.cs" />
     <Compile Include="LogTail\LogStatConfigurationElement.cs" />
     <Compile Include="LogTail\LogConfigurationCollection.cs" />

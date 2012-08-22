@@ -28,7 +28,7 @@ namespace Metrics
             var logParser = new LogTailParser();
             if (feedback)
             {
-                logParser.MessageReporter = new ConsoleLogger();
+                logParser.MessageReporter = new RawConsoleLogger();
             }
             filesUsed.AddRange(logParser.GetMetrics(client));
 

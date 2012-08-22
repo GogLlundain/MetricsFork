@@ -24,7 +24,6 @@ namespace Metrics.Parsers
         private readonly LogConfigurationCollection logs;
         private readonly OffsetCursor<long> cursor;
         private GraphiteClient graphiteClient;
-
         public IMetricsLogger MessageReporter = new NullLogger();
 
         public LogTailParser()
@@ -37,7 +36,7 @@ namespace Metrics.Parsers
             }
         }
 
-        private string[] GetValidLogfilesFromDirectory(string logFileLocation, string logFilePattern, int maxDaysToProcess)
+        private IEnumerable<string> GetValidLogfilesFromDirectory(string logFileLocation, string logFilePattern, int maxDaysToProcess)
         {
             var di = new DirectoryInfo(logFileLocation);
             if (di.Exists)
@@ -45,7 +44,7 @@ namespace Metrics.Parsers
                 var files = di.GetFileSystemInfos(logFilePattern);
                 return (from file in files
                         where file.LastWriteTime.Date > DateTime.Now.Date.AddDays(0 - (maxDaysToProcess + 1))
-                        orderby file.LastWriteTime descending
+                        orderby file.LastWriteTime ascending
                         select file.FullName).ToArray();
             }
 
@@ -75,36 +74,64 @@ namespace Metrics.Parsers
             MessageReporter.ReportProgress("DONE : Calculating total");
 
             var count = 0;
-            Parallel.ForEach(logs, log =>
-                                       {
-                                           string workerId = log.Name;
-                                           MessageReporter.ReportWorkerStatus(workerId, String.Format("[{0}] Warming up", log.Name));
-                                           foreach (var locationKey in log.Locations.AllKeys)
-                                           {
-                                               foreach (var file in GetValidLogfilesFromDirectory(log.Locations[locationKey].Value, log.Pattern, log.MaxDaysToProcess))
-                                               {
-                                                   MessageReporter.ReportWorkerStatus(workerId, String.Format("[{0}] Processing file {1} ", locationKey, file.Substring(file.LastIndexOf("\\") + 1)));
-                                                   var readNewLines = ReadTail(file, log, locationKey);
+            foreach (var log in logs)
+            {
+                string workerId = log.Name;
+                MessageReporter.ReportWorkerStatus(workerId, String.Format("[{0}] Warming up", log.Name));
 
-                                                   Interlocked.Increment(ref count);
-                                                   MessageReporter.SetHeadline(String.Format("Processed {0}/{1} ({2:P}) files", count, totalFilesToProcess, (double)count / (double)totalFilesToProcess));
+                //Group files by their date/filename
+                var logFiles = new List<Log>();
+                foreach (var locationKey in log.Locations.AllKeys)
+                {
+                    foreach (var file in GetValidLogfilesFromDirectory(log.Locations[locationKey].Value, log.Pattern,
+                                                          log.MaxDaysToProcess))
+                    {
+                        logFiles.Add(new Log { Filename = file, LocationKey = locationKey });
+                    }
+                }
 
-                                                   MessageReporter.ReportWorkerStatus(workerId, String.Format("[{0}] {1} files ", locationKey, readNewLines.HasValue ? (readNewLines.Value ? "Finished" : "Not Changed") : "Skipped"));
-                                               }
+                //Go through files by their filename (which is the log date)
+                foreach (var logFileGroup in logFiles.GroupBy(logFile => Path.GetFileName(logFile.Filename)))
+                {
+                    var boomerangValues = new ConcurrentBag<Metric>();
 
-                                               MessageReporter.ReportWorkerStatus(workerId, String.Format("[{0}] DONE LOCATION", locationKey));
-                                           }
+                    //Do all files with the same name at the same time
+                    Parallel.ForEach(logFileGroup, file =>
+                        {
+                            MessageReporter.ReportWorkerStatus(workerId,
+                                                               String.Format("[{0}] Processing file {1} ",
+                                                                             file.LocationKey,
+                                                                             file.Filename.Substring(
+                                                                                 file.Filename.LastIndexOf("\\") + 1)));
+                            var readNewLines = ReadTail(file.Filename, log, file.LocationKey, boomerangValues);
 
-                                           MessageReporter.ReportWorkerStatus(workerId, String.Format("DONE ALL"));
-                                       });
+                            Interlocked.Increment(ref count);
+                            MessageReporter.SetHeadline(String.Format("Processed {0}/{1} ({2:P}) files", count,
+                                                                      totalFilesToProcess,
+                                                                      (double)count / (double)totalFilesToProcess));
+
+                            MessageReporter.ReportWorkerStatus(workerId,
+                                                               String.Format("[{0}] {1} files ", file.LocationKey,
+                                                                             readNewLines.HasValue
+                                                                                 ? (readNewLines.Value
+                                                                                        ? "Finished"
+                                                                                        : "Not Changed")
+                                                                                 : "Skipped"));
+                        });
+
+                    FlushBoomerangMetrics(boomerangValues);
+                }
+
+
+                MessageReporter.ReportWorkerStatus(workerId, String.Format("DONE ALL"));
+            }
 
             return cursor.GetUsedOffsetFiles();
         }
 
-        private bool? ReadTail(string file, LogConfigurationElement log, string locationKey)
+        private bool? ReadTail(string file, LogConfigurationElement log, string locationKey, ConcurrentBag<Metric> boomerangValues)
         {
             var rawValues = new ConcurrentDictionary<LogStatConfigurationElement, ConcurrentBag<Metric>>();
-            var boomerangValues = new ConcurrentBag<Metric>();
 
             if (log == null)
             {
@@ -162,10 +189,9 @@ namespace Metrics.Parsers
                             graphiteClient.SendQuickMetric("metrics.logLines.count", (int)lineCount);
 
                             //send real metrics to graphite
-                            CollateAndSend(log, rawValues, file, lastPosition, boomerangValues);
+                            CollateAndSend(log, rawValues, file, lastPosition);
                             rawValues.Clear();
                             lineCount = 0;
-                            boomerangValues = new ConcurrentBag<Metric>();
                         }
                     }
 
@@ -182,13 +208,13 @@ namespace Metrics.Parsers
             }
 
             graphiteClient.SendQuickMetric("metrics.logLines.count", rawValues.Count);
-            CollateAndSend(log, rawValues, file, lastPosition, boomerangValues);
+            CollateAndSend(log, rawValues, file, lastPosition);
 
             return true;
         }
 
         private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement,
-            ConcurrentBag<Metric>> rawValues, string file, long lastPosition, IEnumerable<Metric> boomerangValues)
+            ConcurrentBag<Metric>> rawValues, string file, long lastPosition)
         {
             var metrics = new List<Metric>();
 
@@ -275,6 +301,14 @@ namespace Metrics.Parsers
                 }
             }
 
+            cursor.StoreLastRead(log.Name, file, lastPosition);
+            graphiteClient.SendMetrics(metrics);
+        }
+
+        private void FlushBoomerangMetrics(IEnumerable<Metric> boomerangValues)
+        {
+            var metrics = new List<Metric>();
+
             //Aggregate the boomerang metrics
             metrics.AddRange(from value in boomerangValues
                              group value by new { value.Timestamp, value.Key }
@@ -284,12 +318,11 @@ namespace Metrics.Parsers
                                      {
                                          Key = metricGroup.Key.Key,
                                          Timestamp = metricGroup.Key.Timestamp,
-                                         Value =
+                                         Value = metricGroup.Key.Key.EndsWith(".count") ? metricGroup.Sum(metric => metric.Value) :
                                              metricGroup.Sum(metric => metric.Value) /
                                              metricGroup.Count()
                                      });
 
-            cursor.StoreLastRead(log.Name, file, lastPosition);
             graphiteClient.SendMetrics(metrics);
         }
 
@@ -456,28 +489,22 @@ namespace Metrics.Parsers
             //Try get the browser bersion
             string browserVersion = GetBrowserVersionFromUserAgent(userAgent);
 
-
             //Add counter for location
-            var existing = metrics.FirstOrDefault(metric => metric.Key == "stats." + log.BoomerangKey + ".location." + locationKey + ".count" && metric.Timestamp == timestamp);
-            if (existing == null)
-            {
-                metrics.Add(new Metric { Key = "stats." + log.BoomerangKey + ".location." + locationKey + ".count", Timestamp = timestamp, Value = 1 });
-            }
-            else
-            {
-                existing.Value++;
-            }
+            metrics.Add(new Metric
+                {
+                    Key = "stats." + log.BoomerangKey + ".location." + locationKey + ".count",
+                    Timestamp = timestamp,
+                    Value = 1
+                });
+
 
             //Counter with browser
-            existing = metrics.FirstOrDefault(metric => metric.Key == "stats." + log.BoomerangKey + ".browser." + browserVersion + ".count" && metric.Timestamp == timestamp);
-            if (existing == null)
-            {
-                metrics.Add(new Metric { Key = "stats." + log.BoomerangKey + ".browser." + browserVersion + ".count", Timestamp = timestamp, Value = 1 });
-            }
-            else
-            {
-                existing.Value++;
-            }
+            metrics.Add(new Metric
+                {
+                    Key = "stats." + log.BoomerangKey + ".browser." + browserVersion + ".count",
+                    Timestamp = timestamp,
+                    Value = 1
+                });
 
             //Get start type
             string startKey = "unknown";
@@ -491,7 +518,9 @@ namespace Metrics.Parsers
                 string fullKey = "timers." + log.BoomerangKey;
                 if (String.Compare(queryStringKey, "t_other", StringComparison.OrdinalIgnoreCase) == 0)
                 {
-                    var otherQueryString = HttpUtility.ParseQueryString(HttpUtility.UrlDecode(queryString[queryStringKey]).Replace("|", "=").Replace(",", "&"));
+                    var otherQueryString =
+                        HttpUtility.ParseQueryString(
+                            HttpUtility.UrlDecode(queryString[queryStringKey]).Replace("|", "=").Replace(",", "&"));
                     foreach (string otherKey in otherQueryString)
                     {
                         if ((otherKey != null) && (otherKey.StartsWith("t_")))
@@ -500,13 +529,41 @@ namespace Metrics.Parsers
                             if (Int32.TryParse(otherQueryString[otherKey], out otherValue))
                             {
                                 //Timer by location
-                                metrics.Add(new Metric { Key = fullKey + ".location." + locationKey + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                                metrics.Add(new Metric
+                                    {
+                                        Key =
+                                            fullKey + ".location." + locationKey + "." + otherKey.Replace("t_", "") +
+                                            ".avg",
+                                        Timestamp = timestamp,
+                                        Value = otherValue
+                                    });
                                 //Timer by location & start type
-                                metrics.Add(new Metric { Key = fullKey + ".location." + locationKey + "." + startKey + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                                metrics.Add(new Metric
+                                    {
+                                        Key =
+                                            fullKey + ".location." + locationKey + "." + startKey + "." +
+                                            otherKey.Replace("t_", "") + ".avg",
+                                        Timestamp = timestamp,
+                                        Value = otherValue
+                                    });
                                 //Timer by browser
-                                metrics.Add(new Metric { Key = fullKey + ".browser." + browserVersion + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                                metrics.Add(new Metric
+                                    {
+                                        Key =
+                                            fullKey + ".browser." + browserVersion + "." +
+                                            otherKey.Replace("t_", "") + ".avg",
+                                        Timestamp = timestamp,
+                                        Value = otherValue
+                                    });
                                 //Timer by browser & start type
-                                metrics.Add(new Metric { Key = fullKey + ".browser." + browserVersion + "." + startKey + "." + otherKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                                metrics.Add(new Metric
+                                    {
+                                        Key =
+                                            fullKey + ".browser." + browserVersion + "." + startKey + "." +
+                                            otherKey.Replace("t_", "") + ".avg",
+                                        Timestamp = timestamp,
+                                        Value = otherValue
+                                    });
                             }
                         }
                     }
@@ -520,28 +577,71 @@ namespace Metrics.Parsers
                     if (Int32.TryParse(queryString[queryStringKey], out otherValue))
                     {
                         //Timer by location
-                        metrics.Add(new Metric { Key = fullKey + ".location." + locationKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                        metrics.Add(new Metric
+                            {
+                                Key =
+                                    fullKey + ".location." + locationKey + "." + queryStringKey.Replace("t_", "") +
+                                    ".avg",
+                                Timestamp = timestamp,
+                                Value = otherValue
+                            });
                         //Timer by location & start type
-                        metrics.Add(new Metric { Key = fullKey + ".location." + locationKey + "." + startKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                        metrics.Add(new Metric
+                            {
+                                Key =
+                                    fullKey + ".location." + locationKey + "." + startKey + "." +
+                                    queryStringKey.Replace("t_", "") + ".avg",
+                                Timestamp = timestamp,
+                                Value = otherValue
+                            });
                         //Timer by browser
-                        metrics.Add(new Metric { Key = fullKey + ".browser." + browserVersion + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                        metrics.Add(new Metric
+                            {
+                                Key =
+                                    fullKey + ".browser." + browserVersion + "." + queryStringKey.Replace("t_", "") +
+                                    ".avg",
+                                Timestamp = timestamp,
+                                Value = otherValue
+                            });
                         //Timer by browser & start type
-                        metrics.Add(new Metric { Key = fullKey + ".browser." + browserVersion + "." + startKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                        metrics.Add(new Metric
+                            {
+                                Key =
+                                    fullKey + ".browser." + browserVersion + "." + startKey + "." +
+                                    queryStringKey.Replace("t_", "") + ".avg",
+                                Timestamp = timestamp,
+                                Value = otherValue
+                            });
 
                         //------------
                         //TODO : Tidy up this huge mess
                         //------------
                         if ((!String.IsNullOrEmpty(urlKey))
-                            && ((queryStringKey.Replace("t_", "") == "done") || (queryStringKey.Replace("t_", "") == "resp")))
+                            &&
+                            ((queryStringKey.Replace("t_", "") == "done") ||
+                             (queryStringKey.Replace("t_", "") == "resp")))
                         {
                             //Timer by location & start type & page
-                            metrics.Add(new Metric { Key = fullKey + ".pages." + urlKey + ".location." + locationKey + "." + startKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                            metrics.Add(new Metric
+                                {
+                                    Key =
+                                        fullKey + ".pages." + urlKey + ".location." + locationKey + "." + startKey +
+                                        "." + queryStringKey.Replace("t_", "") + ".avg",
+                                    Timestamp = timestamp,
+                                    Value = otherValue
+                                });
                             //Timer by browser & start type
-                            metrics.Add(new Metric { Key = fullKey + ".pages." + urlKey + ".browser." + browserVersion + "." + startKey + "." + queryStringKey.Replace("t_", "") + ".avg", Timestamp = timestamp, Value = otherValue });
+                            metrics.Add(new Metric
+                                {
+                                    Key =
+                                        fullKey + ".pages." + urlKey + ".browser." + browserVersion + "." + startKey +
+                                        "." + queryStringKey.Replace("t_", "") + ".avg",
+                                    Timestamp = timestamp,
+                                    Value = otherValue
+                                });
                         }
                     }
                 }
-
             }
         }
 
