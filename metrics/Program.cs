@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Metrics.Parsers;
-using Parsers.Logging;
+using Metrics.Parsers.Logging;
 
 namespace Metrics
 {

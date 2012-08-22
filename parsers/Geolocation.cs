@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.IO;
 using System.Linq;
+using System.Collections.Concurrent;
 
 namespace Metrics.Parsers
 {
@@ -11,6 +12,18 @@ namespace Metrics.Parsers
         private static Geolocation instance;
         private static readonly object LockObject = new object();
         private readonly List<Range> lookup;
+        private bool useCache = true;
+        public bool UseCache
+        {
+            get
+            {
+                return useCache;
+            }
+            set
+            {
+                useCache = value;
+            }
+        }
 
         public static Geolocation Instance
         {
@@ -56,7 +69,7 @@ namespace Metrics.Parsers
 
             foreach (var line in File.ReadAllLines("GeoLiteCity-Blocks.csv"))
             {
-                var split = line.Split(new [] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                var split = line.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                 if (split.Length == 3)
                 {
                     try
@@ -77,11 +90,28 @@ namespace Metrics.Parsers
             }
         }
 
+        //Cached locations... in theory on a select set of users use the site so this is effecient enough
+        private ConcurrentDictionary<long, Range> cachedLocations = new ConcurrentDictionary<long, Range>();
         public Range GetLocation(IPAddress ip)
         {
             var longAddress = IpAddressToLong(ip);
 
-            return lookup.AsParallel().FirstOrDefault(range => range.Start <= longAddress && range.End >= longAddress);
+            if (useCache)
+            {
+                if (cachedLocations.ContainsKey(longAddress))
+                {
+                    return cachedLocations[longAddress];
+                }
+            }
+
+            var result = lookup.AsParallel().FirstOrDefault(range => range.Start <= longAddress && range.End >= longAddress);
+
+            if (useCache)
+            {
+                cachedLocations.TryAdd(longAddress, result);
+            }
+
+            return result;
         }
 
         public static long IpAddressToLong(IPAddress ip)

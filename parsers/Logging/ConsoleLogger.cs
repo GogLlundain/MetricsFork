@@ -1,18 +1,15 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
-namespace Parsers.Logging
+namespace Metrics.Parsers.Logging
 {
     public class ConsoleLogger : IMetricsLogger
     {
         private string headlineMessage = String.Empty;
         private DateTime lastUpdateTime = DateTime.Now;
-        private int millisecondsBetweenUpdates = 500;
-        private ConcurrentDictionary<string, string> workerStatuses = new ConcurrentDictionary<string, string>();
-        private object prisoner = new object();
+        private const int MillisecondsBetweenUpdates = 500;
+        private readonly ConcurrentDictionary<string, string> workerStatuses = new ConcurrentDictionary<string, string>();
+        private readonly object prisoner = new object();
 
         public ConsoleLogger()
         {
@@ -44,9 +41,9 @@ namespace Parsers.Logging
         private void UpdateProgressTable()
         {
             Console.SetCursorPosition(0, 3);
-            foreach (string workerId in workerStatuses.Keys)
+            foreach (var workerId in workerStatuses.Keys)
             {
-                Console.WriteLine(String.Format("{0} - {1}", workerId, workerStatuses[workerId]));
+                Console.WriteLine("{0} - {1}", workerId, workerStatuses[workerId]);
             }
         }
 
@@ -58,7 +55,7 @@ namespace Parsers.Logging
 
         private void RenderResultsTable()
         {
-            if (DateTime.Now > lastUpdateTime.AddMilliseconds(millisecondsBetweenUpdates))
+            if (DateTime.Now > lastUpdateTime.AddMilliseconds(MillisecondsBetweenUpdates))
             {
                 Console.Clear();
                 Console.SetCursorPosition(0, 0);

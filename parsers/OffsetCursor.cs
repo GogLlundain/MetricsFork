@@ -6,7 +6,6 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Linq;
-using System.Collections;
 
 namespace Metrics.Parsers
 {
@@ -76,7 +75,6 @@ namespace Metrics.Parsers
 
                     if (!File.Exists(tempName))
                     {
-
                         return default(T);
                     }
 
@@ -92,10 +90,7 @@ namespace Metrics.Parsers
                     {
                         return ConvertType(String.Join(Environment.NewLine, lines));
                     }
-                    else
-                    {
-                        return ConvertType(lines[0]);
-                    }
+                    return ConvertType(lines[0]);
                 }
             }
             catch

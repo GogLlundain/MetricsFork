@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 using System.Web;
 using System.Web.Configuration;
 using Metrics.Parsers.LogTail;
-using Parsers.Logging;
+using Metrics.Parsers.Logging;
 
 [assembly: CLSCompliant(true)]
 namespace Metrics.Parsers
@@ -39,10 +39,10 @@ namespace Metrics.Parsers
 
         private string[] GetValidLogfilesFromDirectory(string logFileLocation, string logFilePattern, int maxDaysToProcess)
         {
-            DirectoryInfo di = new DirectoryInfo(logFileLocation);
+            var di = new DirectoryInfo(logFileLocation);
             if (di.Exists)
             {
-                FileSystemInfo[] files = di.GetFileSystemInfos(logFilePattern);
+                var files = di.GetFileSystemInfos(logFilePattern);
                 return (from file in files
                         where file.LastWriteTime.Date > DateTime.Now.Date.AddDays(0 - (maxDaysToProcess + 1))
                         orderby file.LastWriteTime descending
@@ -59,10 +59,7 @@ namespace Metrics.Parsers
             {
                 foreach (var locationKey in log.Locations.AllKeys)
                 {
-                    foreach (var file in GetValidLogfilesFromDirectory(log.Locations[locationKey].Value, log.Pattern, log.MaxDaysToProcess))
-                    {
-                        total++;
-                    }
+                    total += GetValidLogfilesFromDirectory(log.Locations[locationKey].Value, log.Pattern, log.MaxDaysToProcess).Count();
                 }
             }
 
@@ -74,10 +71,10 @@ namespace Metrics.Parsers
             graphiteClient = client;
 
             MessageReporter.ReportProgress("Calculating total...");
-            int totalFilesToProcess = CalculateTotalFilesToProcess();
+            var totalFilesToProcess = CalculateTotalFilesToProcess();
             MessageReporter.ReportProgress("DONE : Calculating total");
 
-            int count = 0;
+            var count = 0;
             Parallel.ForEach(logs, log =>
                                        {
                                            string workerId = log.Name;
@@ -461,7 +458,7 @@ namespace Metrics.Parsers
 
 
             //Add counter for location
-            var existing = metrics.Where(metric => metric.Key == "stats." + log.BoomerangKey + ".location." + locationKey + ".count" && metric.Timestamp == timestamp).FirstOrDefault();
+            var existing = metrics.FirstOrDefault(metric => metric.Key == "stats." + log.BoomerangKey + ".location." + locationKey + ".count" && metric.Timestamp == timestamp);
             if (existing == null)
             {
                 metrics.Add(new Metric { Key = "stats." + log.BoomerangKey + ".location." + locationKey + ".count", Timestamp = timestamp, Value = 1 });
@@ -472,7 +469,7 @@ namespace Metrics.Parsers
             }
 
             //Counter with browser
-            existing = metrics.Where(metric => metric.Key == "stats." + log.BoomerangKey + ".browser." + browserVersion + ".count" && metric.Timestamp == timestamp).FirstOrDefault();
+            existing = metrics.FirstOrDefault(metric => metric.Key == "stats." + log.BoomerangKey + ".browser." + browserVersion + ".count" && metric.Timestamp == timestamp);
             if (existing == null)
             {
                 metrics.Add(new Metric { Key = "stats." + log.BoomerangKey + ".browser." + browserVersion + ".count", Timestamp = timestamp, Value = 1 });

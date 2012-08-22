@@ -24,7 +24,7 @@ namespace Metrics.Parsers
         public void SendMetrics(IEnumerable<Metric> metrics)
         {
             //Make sure there are metrics to send before we waste a connection
-            if ((metrics != null) && (metrics.Count() > 0))
+            if ((metrics != null) && (metrics.Any()))
             {
                 using (var graphiteClient = new GraphiteTcpClient(host, port, prefix))
                 {
