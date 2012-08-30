@@ -38,17 +38,22 @@ namespace Metrics.Parsers
 
         private IEnumerable<string> GetValidLogfilesFromDirectory(string logFileLocation, string logFilePattern, int maxDaysToProcess)
         {
-            var di = new DirectoryInfo(logFileLocation);
-            if (di.Exists)
+            try
             {
-                var files = di.GetFileSystemInfos(logFilePattern);
-                return (from file in files
-                        where file.LastWriteTime.Date > DateTime.Now.Date.AddDays(0 - (maxDaysToProcess + 1))
-                        orderby file.LastWriteTime ascending
-                        select file.FullName).ToArray();
-            }
+                var di = new DirectoryInfo(logFileLocation);
+                if (di.Exists)
+                {
+                    var files = di.GetFileSystemInfos(logFilePattern);
+                    return (from file in files
+                            where file.LastWriteTime.Date > DateTime.Now.Date.AddDays(0 - (maxDaysToProcess + 1))
+                            orderby file.LastWriteTime ascending
+                            select file.FullName).ToArray();
+                }
 
-            throw new DirectoryNotFoundException("Log path does not exist : " + logFileLocation);
+            }
+            catch { }
+
+            return new List<string>();
         }
 
         private int CalculateTotalFilesToProcess()
