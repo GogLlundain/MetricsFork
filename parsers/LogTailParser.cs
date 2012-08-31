@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Metrics.Parsers.Logging;
+using Metrics.Parsers.LogTail;
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -13,8 +15,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Configuration;
-using Metrics.Parsers.LogTail;
-using Metrics.Parsers.Logging;
 
 [assembly: CLSCompliant(true)]
 namespace Metrics.Parsers
@@ -107,7 +107,7 @@ namespace Metrics.Parsers
                                                                String.Format("[{0}] Processing file {1} ",
                                                                              file.LocationKey,
                                                                              file.Filename.Substring(
-                                                                                 file.Filename.LastIndexOf("\\") + 1)));
+                                                                                 file.Filename.LastIndexOf("\\", System.StringComparison.Ordinal) + 1)));
                             var readNewLines = ReadTail(file.Filename, log, file.LocationKey, boomerangValues);
 
                             Interlocked.Increment(ref count);
@@ -270,7 +270,6 @@ namespace Metrics.Parsers
                                                              metricGroup.Min(metric => metric.Value)
                                                      });
                             break;
-                        case "avg":
                         default:
                             metrics.AddRange(from value in rawValues[stat]
                                              group value by new { value.Timestamp, value.Key }
@@ -391,8 +390,19 @@ namespace Metrics.Parsers
                         }
                     }
 
+                    if (!String.IsNullOrWhiteSpace(stat.Match))
+                    {
+                        found =
+                            String.Compare(matches[0].Groups["url"].Value, stat.Match,
+                                           StringComparison.OrdinalIgnoreCase) == 0;
+                    }
+                    else if (!String.IsNullOrWhiteSpace(stat.Prefix))
+                    {
+                        found = matches[0].Groups["url"].Value.StartsWith(stat.Prefix, StringComparison.OrdinalIgnoreCase);
+                    }
+
                     //If there are extension filters and they werent found, go to the next stat
-                    if ((stat.ExtensionsList.Count > 0) && (!found))
+                    if (((stat.ExtensionsList.Count > 0) || (!String.IsNullOrWhiteSpace(stat.Match)) || (!String.IsNullOrWhiteSpace(stat.Prefix))) && (!found))
                     {
                         continue;
                     }

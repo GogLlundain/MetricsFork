@@ -73,6 +73,32 @@ namespace Metrics.Parsers.LogTail
             }
         }
 
+        [ConfigurationProperty("match", IsRequired = false, DefaultValue = "")]
+        public string Match
+        {
+            get
+            {
+                return (String)this["match"];
+            }
+            set
+            {
+                this["match"] = value;
+            }
+        }
+
+        [ConfigurationProperty("prefix", IsRequired = false, DefaultValue = "")]
+        public string Prefix
+        {
+            get
+            {
+                return (String)this["prefix"];
+            }
+            set
+            {
+                this["prefix"] = value;
+            }
+        }
+
         public List<string> ExtensionsList
         {
             get
