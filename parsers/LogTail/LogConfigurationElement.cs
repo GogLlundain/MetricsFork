@@ -30,130 +30,96 @@ namespace Metrics.Parsers.LogTail
         [ConfigurationProperty("enabled", DefaultValue = true, IsRequired = false)]
         public bool Enabled
         {
-            get
-            {
-                return (Boolean)this["enabled"];
-            }
-            set
-            {
-                this["enabled"] = value;
-            }
+            get { return (Boolean)this["enabled"]; }
+            set { this["enabled"] = value; }
         }
 
         [ConfigurationProperty("pattern", IsRequired = false, DefaultValue = "*")]
         public string Pattern
         {
-            get
-            {
-                return (String)this["pattern"];
-            }
-            set
-            {
-                this["pattern"] = value;
-            }
+            get { return (String)this["pattern"]; }
+            set { this["pattern"] = value; }
         }
 
         [ConfigurationProperty("name", IsRequired = true)]
         public string Name
         {
-            get
-            {
-                return (String)this["name"];
-            }
-            set
-            {
-                this["name"] = value;
-            }
+            get { return (String)this["name"]; }
+            set { this["name"] = value; }
         }
 
         [ConfigurationProperty("maxTailMB", IsRequired = false, DefaultValue = 0)]
         public int MaxTailMB
         {
-            get
-            {
-                return (int)this["maxTailMB"];
-            }
-            set
-            {
-                this["maxTailMB"] = value;
-            }
+            get { return (int)this["maxTailMB"]; }
+            set { this["maxTailMB"] = value; }
         }
 
         [ConfigurationProperty("maxDaysToProcess", IsRequired = false, DefaultValue = 7)]
         public int MaxDaysToProcess
         {
-            get
-            {
-                return (int)this["maxDaysToProcess"];
-            }
-            set
-            {
-                this["maxDaysToProcess"] = value;
-            }
+            get { return (int)this["maxDaysToProcess"]; }
+            set { this["maxDaysToProcess"] = value; }
         }
 
         [ConfigurationProperty("regexKey", IsRequired = true)]
         public string ExpressionKey
         {
-            get
-            {
-                return (String)this["regexKey"];
-            }
-            set
-            {
-                this["regexKey"] = value;
-            }
+            get { return (String)this["regexKey"]; }
+            set { this["regexKey"] = value; }
         }
 
         [ConfigurationProperty("boomerangBeacon", IsRequired = false)]
         public string BoomerangBeacon
         {
-            get
-            {
-                return (String)this["boomerangBeacon"];
-            }
-            set
-            {
-                this["boomerangBeacon"] = value;
-            }
+            get { return (String)this["boomerangBeacon"]; }
+            set { this["boomerangBeacon"] = value; }
         }
 
         [ConfigurationProperty("boomerangKey", IsRequired = false)]
         public string BoomerangKey
         {
-            get
-            {
-                return (String)this["boomerangKey"];
-            }
-            set
-            {
-                this["boomerangKey"] = value;
-            }
+            get { return (String)this["boomerangKey"]; }
+            set { this["boomerangKey"] = value; }
         }
 
         [ConfigurationProperty("interval", IsRequired = false)]
         public string Interval
         {
-            get
-            {
-                return (String)this["interval"];
-            }
-            set
-            {
-                this["interval"] = value;
-            }
+            get { return (String)this["interval"]; }
+            set { this["interval"] = value; }
         }
 
         [ConfigurationProperty("dateFormat", IsRequired = false, DefaultValue = "yyyy-mm-dd hh:MM:ss")]
         public string DateFormat
         {
+            get { return (String)this["dateFormat"]; }
+            set { this["dateFormat"] = value; }
+        }
+
+        [ConfigurationProperty("rollingFile", IsRequired = false, DefaultValue = false)]
+        public bool SingleRollingFile
+        {
             get
             {
-                return (String)this["dateFormat"];
+                return (bool)this["rollingFile"];
             }
             set
             {
-                this["dateFormat"] = value;
+                this["rollingFile"] = value;
+            }
+        }
+
+        [ConfigurationProperty("assumeUTC", IsRequired = false, DefaultValue = true)]
+        public bool AssumeUniversal
+        {
+            get
+            {
+                return (bool)this["assumeUTC"];
+            }
+            set
+            {
+                this["assumeUTC"] = value;
             }
         }
 

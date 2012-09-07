@@ -150,6 +150,12 @@ namespace Metrics.Parsers
             var info = new FileInfo(file);
             var offset = cursor.GetLastRead(log.Name, file);
 
+            //TODO : better implmentation
+            if (log.SingleRollingFile)
+            {
+                offset = 0;
+            }
+
             long lastPosition = offset;
 
             //If file hasnt changed, don't bother opening
@@ -340,7 +346,7 @@ namespace Metrics.Parsers
                 try
                 {
                     dateTime = DateTime.ParseExact(matches[0].Groups[log.Interval].Value,
-                                                               log.DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
+                        log.DateFormat, CultureInfo.InvariantCulture, log.AssumeUniversal? DateTimeStyles.AssumeUniversal : DateTimeStyles.AssumeLocal);
                     //Strip the last second 
                     if (log.TenSecondGroup)
                     {
