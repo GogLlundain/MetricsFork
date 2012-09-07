@@ -1,4 +1,5 @@
-﻿using Metrics.Parsers.Logging;
+﻿using System.Security.Cryptography;
+using Metrics.Parsers.Logging;
 using Metrics.Parsers.LogTail;
 using System;
 using System.Collections;
@@ -148,12 +149,38 @@ namespace Metrics.Parsers
 
             //Work out the last read position
             var info = new FileInfo(file);
-            var offset = cursor.GetLastRead(log.Name, file);
+            long offset;
+            string hash = null;
 
-            //TODO : better implmentation
+            //Handle rolling single files
             if (log.SingleRollingFile)
             {
-                offset = 0;
+                //Read first line to compute hash
+                var firstLineStream = File.Open(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                try
+                {
+                    using (var reader = new StreamReader(firstLineStream))
+                    {
+                        firstLineStream = null;
+                        if (reader.Peek() != -1)
+                        {
+                            var line = reader.ReadLine();
+                            using (var md5 = MD5.Create())
+                            {
+                                hash = OffsetCursor<long>.GetMD5HashFileName(md5, line);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+
+                offset = cursor.GetLastRead(log.Name, file, hash);
+            }
+            else
+            {
+                offset = cursor.GetLastRead(log.Name, file);
             }
 
             long lastPosition = offset;
@@ -219,13 +246,13 @@ namespace Metrics.Parsers
             }
 
             graphiteClient.SendQuickMetric("metrics.logLines.count", rawValues.Count);
-            CollateAndSend(log, rawValues, file, lastPosition);
+            CollateAndSend(log, rawValues, file, lastPosition, hash);
 
             return true;
         }
 
         private void CollateAndSend(LogConfigurationElement log, IDictionary<LogStatConfigurationElement,
-            ConcurrentBag<Metric>> rawValues, string file, long lastPosition)
+            ConcurrentBag<Metric>> rawValues, string file, long lastPosition, string hash = null)
         {
             var metrics = new List<Metric>();
 
@@ -311,7 +338,7 @@ namespace Metrics.Parsers
                 }
             }
 
-            cursor.StoreLastRead(log.Name, file, lastPosition);
+            cursor.StoreLastRead(log.Name, file, lastPosition, hash);
             graphiteClient.SendMetrics(metrics);
         }
 
@@ -346,7 +373,7 @@ namespace Metrics.Parsers
                 try
                 {
                     dateTime = DateTime.ParseExact(matches[0].Groups[log.Interval].Value,
-                        log.DateFormat, CultureInfo.InvariantCulture, log.AssumeUniversal? DateTimeStyles.AssumeUniversal : DateTimeStyles.AssumeLocal);
+                        log.DateFormat, CultureInfo.InvariantCulture, log.AssumeUniversal ? DateTimeStyles.AssumeUniversal : DateTimeStyles.AssumeLocal);
                     //Strip the last second 
                     if (log.TenSecondGroup)
                     {

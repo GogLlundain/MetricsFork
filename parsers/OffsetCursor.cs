@@ -25,7 +25,7 @@ namespace Metrics.Parsers
             this.prefix = prefix;
         }
 
-        public void StoreLastRead(string logName, string uniqueName, T offset)
+        public void StoreLastRead(string logName, string uniqueName, T offset, string firstLineHash = null)
         {
             using (var md5 = MD5.Create())
             {
@@ -34,14 +34,20 @@ namespace Metrics.Parsers
                 string tempName = offsetFileDirectory + GetMD5HashFileName(md5, uniqueName);
                 //var tempName = "offset" + Path.DirectorySeparatorChar + prefix + Path.DirectorySeparatorChar + prefix + "-" + GetMD5HashFileName(md5, uniqueName);
 
+                string value = GetOffsetValue(offset);
+                if (!String.IsNullOrWhiteSpace(firstLineHash))
+                {
+                    value = value + Environment.NewLine + firstLineHash;
+                }
+
                 //if its a string value we don't write the helper name in the file
                 if (offset is String)
                 {
-                    File.WriteAllText(tempName, GetOffsetValue(offset));
+                    File.WriteAllText(tempName, value);
                 }
                 else
                 {
-                    File.WriteAllText(tempName, GetOffsetValue(offset) + Environment.NewLine + uniqueName);
+                    File.WriteAllText(tempName, value + Environment.NewLine + uniqueName);
                 }
 
                 //Remember we accessed this file to avoid clean up
@@ -57,7 +63,7 @@ namespace Metrics.Parsers
             return Convert.ToString(offset, CultureInfo.InvariantCulture);
         }
 
-        public T GetLastRead(string logName, string uniqueName)
+        public T GetLastRead(string logName, string uniqueName, string firstLineHash = null)
         {
             try
             {
@@ -85,6 +91,15 @@ namespace Metrics.Parsers
                     }
 
                     var lines = File.ReadAllLines(tempName);
+
+                    //If we have a first line hash, first make sure this file is the same one to handle rolling files
+                    if (!String.IsNullOrWhiteSpace(firstLineHash))
+                    {
+                        if (String.CompareOrdinal(lines[1], firstLineHash) != 0)
+                        {
+                            return default(T);
+                        }
+                    }
 
                     if (typeof(T) == typeof(String))
                     {
@@ -121,7 +136,7 @@ namespace Metrics.Parsers
         /// Get an MD5 hased filename to store the last read byte
         /// http://msdn.microsoft.com/en-us/library/system.security.cryptography.md5.aspx
         /// </summary>
-        private static string GetMD5HashFileName(HashAlgorithm hashAlgorithm, string input)
+        public static string GetMD5HashFileName(HashAlgorithm hashAlgorithm, string input)
         {
             //Validate inputs
             if (hashAlgorithm == null)
